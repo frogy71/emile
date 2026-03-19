@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { computeMatchScore } from "@/lib/ai/scoring";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // POST /api/matching — compute match score for org + grant
 export async function POST(request: Request) {
+  const supabase = getSupabase();
   const body = await request.json();
   const { organizationId, grantId, projectId } = body;
 

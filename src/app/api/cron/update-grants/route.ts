@@ -12,12 +12,12 @@ import { createClient } from "@supabase/supabase-js";
  * After update: marks expired grants, counts new grants.
  */
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-const AT_TOKEN = process.env.AIDES_TERRITOIRES_API_TOKEN!;
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 function cleanHtml(h: string | null): string | null {
   if (!h) return null;
@@ -36,6 +36,9 @@ async function updateAidesTerritoires(): Promise<{
   fetched: number;
   upserted: number;
 }> {
+  const supabase = getSupabase();
+  const AT_TOKEN = process.env.AIDES_TERRITOIRES_API_TOKEN!;
+
   // Get JWT
   const jwtRes = await fetch(
     "https://aides-territoires.beta.gouv.fr/api/aids/?page_size=1",
@@ -121,6 +124,7 @@ async function updateAidesTerritoires(): Promise<{
 // ── Mark expired grants ──────────────────────────────────────────
 
 async function markExpiredGrants(): Promise<number> {
+  const supabase = getSupabase();
   const { data } = await supabase
     .from("grants")
     .update({ status: "expired" })
@@ -142,6 +146,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const supabase = getSupabase();
   const startTime = Date.now();
 
   try {

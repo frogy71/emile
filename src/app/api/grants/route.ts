@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 /**
  * GET /api/grants — list grants with filters
@@ -19,6 +21,7 @@ const supabase = createClient(
  * - limit, offset: pagination
  */
 export async function GET(request: Request) {
+  const supabase = getSupabase();
   const { searchParams } = new URL(request.url);
   const country = searchParams.get("country");
   const search = searchParams.get("q");

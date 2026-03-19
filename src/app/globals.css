@@ -1,26 +1,148 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-inter);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  /* Neo-brutalist warm palette */
+  --background: #faf9f6;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+  --primary: #1a1a1a;
+  --primary-foreground: #faf9f6;
+  --secondary: #f0eee6;
+  --secondary-foreground: #1a1a1a;
+  --muted: #f0eee6;
+  --muted-foreground: #6b6b6b;
+  --accent: #c8f76f;
+  --accent-foreground: #1a1a1a;
+  --destructive: #ff6b6b;
+  --destructive-foreground: #1a1a1a;
+  --border: #1a1a1a;
+  --input: #1a1a1a;
+  --ring: #1a1a1a;
+  --radius: 1rem;
+
+  /* Extra semantic colors */
+  --success: #c8f76f;
+  --success-foreground: #1a1a1a;
+  --warning: #ffe066;
+  --warning-foreground: #1a1a1a;
+
+  /* Colorful accent palette for cards/tags */
+  --chart-1: #c8f76f;
+  --chart-2: #ffe066;
+  --chart-3: #ffa3d1;
+  --chart-4: #a3d5ff;
+  --chart-5: #d4b5ff;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Neo-brutalist card style */
+.card-brutal {
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0px 0px var(--border);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.card-brutal:hover {
+  box-shadow: 6px 6px 0px 0px var(--border);
+  transform: translate(-1px, -1px);
+}
+
+/* Accent card variants */
+.card-green {
+  background: #c8f76f;
+}
+
+.card-yellow {
+  background: #ffe066;
+}
+
+.card-pink {
+  background: #ffa3d1;
+}
+
+.card-blue {
+  background: #a3d5ff;
+}
+
+.card-purple {
+  background: #d4b5ff;
+}
+
+/* Bold button style */
+.btn-brutal {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 3px 3px 0px 0px var(--border);
+  font-weight: 600;
+  transition: box-shadow 0.1s ease, transform 0.1s ease;
+}
+
+.btn-brutal:hover {
+  box-shadow: 4px 4px 0px 0px var(--border);
+  transform: translate(-1px, -1px);
+}
+
+.btn-brutal:active {
+  box-shadow: 1px 1px 0px 0px var(--border);
+  transform: translate(1px, 1px);
+}
+
+/* Score badge */
+.score-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.1rem;
 }

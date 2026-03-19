@@ -1,8 +1,8 @@
+import { createClient } from "@supabase/supabase-js";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Search,
   Target,
   FileText,
   ArrowRight,
@@ -10,31 +10,62 @@ import {
   Plus,
   Sparkles,
   FolderOpen,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
 
-const PLACEHOLDER_PROJECTS = [
-  {
-    id: "proj-1",
-    name: "Aide humanitaire Ukraine",
-    color: "bg-[#c8f76f]",
-    themes: ["Humanitaire", "Migration"],
-    matchCount: 4,
-    topScore: 91,
-    nextDeadline: "2026-04-20",
-  },
-  {
-    id: "proj-2",
-    name: "Inclusion jeunesse",
-    color: "bg-[#a3d5ff]",
-    themes: ["Jeunesse", "Inclusion"],
-    matchCount: 2,
-    topScore: 68,
-    nextDeadline: "2026-06-15",
-  },
+const PROJECT_COLORS = [
+  "bg-[#c8f76f]",
+  "bg-[#a3d5ff]",
+  "bg-[#ffe066]",
+  "bg-[#ffa3d1]",
+  "bg-[#d4b5ff]",
 ];
 
-export default function DashboardPage() {
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+export default async function DashboardPage() {
+  const supabase = getSupabase();
+
+  // Fetch projects
+  const { data: projects } = await supabase
+    .from("projects")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  // Fetch stats
+  const { count: grantsCount } = await supabase
+    .from("grants")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "active");
+
+  const { count: matchCount } = await supabase
+    .from("match_scores")
+    .select("*", { count: "exact", head: true });
+
+  const { count: proposalCount } = await supabase
+    .from("proposals")
+    .select("*", { count: "exact", head: true });
+
+  // Upcoming deadlines (next 30 days)
+  const now = new Date().toISOString().split("T")[0];
+  const in30 = new Date(Date.now() + 30 * 86400000)
+    .toISOString()
+    .split("T")[0];
+  const { count: deadlineCount } = await supabase
+    .from("grants")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "active")
+    .gte("deadline", now)
+    .lte("deadline", in30);
+
+  const projectList = projects || [];
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -58,7 +89,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <FolderOpen className="h-6 w-6" />
             <div>
-              <p className="text-3xl font-black">2</p>
+              <p className="text-3xl font-black">{projectList.length}</p>
               <p className="text-xs font-bold">Projets actifs</p>
             </div>
           </div>
@@ -68,8 +99,8 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <Target className="h-6 w-6" />
             <div>
-              <p className="text-3xl font-black">6</p>
-              <p className="text-xs font-bold">Grants matchés</p>
+              <p className="text-3xl font-black">{grantsCount || 0}</p>
+              <p className="text-xs font-bold">Subventions actives</p>
             </div>
           </div>
         </div>
@@ -78,7 +109,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <Clock className="h-6 w-6" />
             <div>
-              <p className="text-3xl font-black">2</p>
+              <p className="text-3xl font-black">{deadlineCount || 0}</p>
               <p className="text-xs font-bold">Deadlines ce mois</p>
             </div>
           </div>
@@ -88,58 +119,78 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <FileText className="h-6 w-6" />
             <div>
-              <p className="text-3xl font-black">0</p>
+              <p className="text-3xl font-black">{proposalCount || 0}</p>
               <p className="text-xs font-bold">Propositions créées</p>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Quick links */}
+      <div className="mt-6">
+        <Link href="/grants">
+          <div className="inline-flex items-center gap-2 rounded-xl border-2 border-border bg-[#ffe066] px-4 py-2.5 font-bold shadow-[3px_3px_0px_0px_#1a1a1a] hover:shadow-[5px_5px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all">
+            <Search className="h-4 w-4" />
+            Explorer les {grantsCount || 0} subventions disponibles
+            <ArrowRight className="h-4 w-4" />
+          </div>
+        </Link>
+      </div>
+
       {/* Projects */}
       <h2 className="mt-10 text-xl font-black">Mes projets</h2>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {PLACEHOLDER_PROJECTS.map((project) => (
-          <Link key={project.id} href={`/projects/${project.id}`}>
-            <Card className="hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px] cursor-pointer">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`h-5 w-5 rounded-lg border-2 border-border ${project.color} shrink-0 mt-0.5`}
-                  />
-                  <div className="flex-1">
-                    <h3 className="text-lg font-black">{project.name}</h3>
-                    <div className="flex gap-1.5 mt-2">
-                      {project.themes.map((t) => (
-                        <Badge key={t} variant="secondary">
-                          {t}
-                        </Badge>
-                      ))}
-                    </div>
+        {projectList.length > 0 ? (
+          projectList.map((project, i) => (
+            <Link key={project.id} href={`/projects/${project.id}`}>
+              <Card className="hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px] cursor-pointer">
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`h-5 w-5 rounded-lg border-2 border-border ${PROJECT_COLORS[i % PROJECT_COLORS.length]} shrink-0 mt-0.5`}
+                    />
+                    <div className="flex-1">
+                      <h3 className="text-lg font-black">{project.name}</h3>
+                      {project.summary && (
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                          {project.summary}
+                        </p>
+                      )}
+                      <div className="flex gap-1.5 mt-2 flex-wrap">
+                        {project.themes?.map((t: string) => (
+                          <Badge key={t} variant="secondary">
+                            {t}
+                          </Badge>
+                        ))}
+                      </div>
 
-                    <div className="flex items-center gap-4 mt-4 text-sm font-bold">
-                      <span className="flex items-center gap-1.5">
-                        <Target className="h-3.5 w-3.5" />
-                        {project.matchCount} matches
-                      </span>
-                      <span className="flex items-center gap-1.5 text-[#c8f76f] bg-foreground px-2 py-0.5 rounded-lg">
-                        <Sparkles className="h-3.5 w-3.5" />
-                        Top: {project.topScore}/100
-                      </span>
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <Clock className="h-3.5 w-3.5" />
-                        {new Date(project.nextDeadline).toLocaleDateString(
-                          "fr-FR"
+                      <div className="flex items-center gap-4 mt-4 text-sm font-bold">
+                        {project.budget && (
+                          <span className="text-muted-foreground">
+                            {Number(project.budget).toLocaleString("fr-FR")} €
+                          </span>
                         )}
-                      </span>
+                        {project.duration_months && (
+                          <span className="text-muted-foreground">
+                            {project.duration_months} mois
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    <ArrowRight className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+                </CardContent>
+              </Card>
+            </Link>
+          ))
+        ) : (
+          <div className="col-span-2 text-center py-8">
+            <p className="text-muted-foreground font-medium">
+              Aucun projet pour l&apos;instant. Créez votre premier projet !
+            </p>
+          </div>
+        )}
 
         {/* New project card */}
         <Link href="/projects/new">

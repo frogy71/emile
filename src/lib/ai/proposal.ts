@@ -5,6 +5,8 @@
  * based on the org profile, project data, and grant description.
  */
 
+import { logAiUsage } from "./usage-tracker";
+
 export interface ProposalDraft {
   sections: {
     title: string;
@@ -84,6 +86,17 @@ export async function generateProposal(
 
     const data = await response.json();
     const text = data.content?.[0]?.text || "";
+
+    // Track AI usage
+    const usage = data.usage;
+    if (usage) {
+      logAiUsage({
+        action: "proposal",
+        model: "claude-sonnet-4-20250514",
+        inputTokens: usage.input_tokens || 0,
+        outputTokens: usage.output_tokens || 0,
+      });
+    }
 
     // Parse sections from the response
     const sections = parseSections(text);

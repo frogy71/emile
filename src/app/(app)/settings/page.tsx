@@ -1,10 +1,37 @@
+"use client";
+
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Bell, CreditCard, Check, Sparkles } from "lucide-react";
+import { Bell, CreditCard, Check, Sparkles, Loader2, FileText, ExternalLink } from "lucide-react";
 
 export default function SettingsPage() {
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [loadingPortal, setLoadingPortal] = useState(false);
+
+  async function handleCheckout(plan: "monthly" | "annual") {
+    setLoadingPlan(plan);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || "Erreur lors de la création du paiement");
+      }
+    } catch {
+      alert("Erreur de connexion. Veuillez réessayer.");
+    } finally {
+      setLoadingPlan(null);
+    }
+  }
+
   return (
     <div>
       <div>
@@ -100,10 +127,26 @@ export default function SettingsPage() {
               </div>
 
               <div className="mt-6 grid gap-3 md:grid-cols-2">
-                <Button variant="outline" className="w-full">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleCheckout("monthly")}
+                  disabled={!!loadingPlan}
+                >
+                  {loadingPlan === "monthly" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : null}
                   Mensuel — 79€/mois HT
                 </Button>
-                <Button variant="accent" className="w-full">
+                <Button
+                  variant="accent"
+                  className="w-full"
+                  onClick={() => handleCheckout("annual")}
+                  disabled={!!loadingPlan}
+                >
+                  {loadingPlan === "annual" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : null}
                   Annuel — 59€/mois HT
                   <Badge variant="default" className="ml-2 bg-foreground text-background text-[10px]">
                     -25%
@@ -115,11 +158,58 @@ export default function SettingsPage() {
               </p>
 
               <p className="mt-3 text-xs text-muted-foreground text-center">
-                Annulation possible à tout moment.
+                Paiement sécurisé via Stripe. Annulation possible à tout moment.
                 <br />
                 Une subvention décrochée rembourse des années d&apos;abonnement.
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Invoices / Billing Portal */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Facturation
+            </CardTitle>
+            <CardDescription>
+              Consultez vos factures, mettez à jour votre moyen de paiement ou modifiez votre plan
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                setLoadingPortal(true);
+                try {
+                  const res = await fetch("/api/stripe/portal", {
+                    method: "POST",
+                  });
+                  const data = await res.json();
+                  if (data.url) {
+                    window.location.href = data.url;
+                  } else {
+                    alert(data.error || "Erreur");
+                  }
+                } catch {
+                  alert("Erreur de connexion");
+                } finally {
+                  setLoadingPortal(false);
+                }
+              }}
+              disabled={loadingPortal}
+            >
+              {loadingPortal ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ExternalLink className="h-4 w-4" />
+              )}
+              Gérer mon abonnement et mes factures
+            </Button>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Accédez au portail Stripe pour télécharger vos factures PDF, modifier votre carte ou changer de plan.
+            </p>
           </CardContent>
         </Card>
       </div>

@@ -7,6 +7,8 @@
  * Returns a structured score with explanation.
  */
 
+import { logAiUsage } from "./usage-tracker";
+
 export interface MatchScoreResult {
   score: number; // 0-100
   difficulty: "easy" | "medium" | "hard" | "very_hard"; // How hard it is to get the grant
@@ -95,6 +97,17 @@ export async function computeMatchScore(
 
     const data = await response.json();
     const text = data.content?.[0]?.text || "";
+
+    // Track AI usage
+    const usage = data.usage;
+    if (usage) {
+      logAiUsage({
+        action: "scoring",
+        model: "claude-haiku-4-5-20250315",
+        inputTokens: usage.input_tokens || 0,
+        outputTokens: usage.output_tokens || 0,
+      });
+    }
 
     // Parse JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);

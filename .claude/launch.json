@@ -6,6 +6,18 @@
       "runtimeExecutable": "/Users/francoistresorier/.local/node-v22.14.0-darwin-arm64/bin/npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "grant-finder-prod",
+      "runtimeExecutable": "/Users/francoistresorier/.local/node-v22.14.0-darwin-arm64/bin/npm",
+      "runtimeArgs": ["run", "start"],
+      "port": 3000
+    },
+    {
+      "name": "drizzle-studio",
+      "runtimeExecutable": "/Users/francoistresorier/.local/node-v22.14.0-darwin-arm64/bin/npx",
+      "runtimeArgs": ["drizzle-kit", "studio"],
+      "port": 4983
     }
   ]
 }

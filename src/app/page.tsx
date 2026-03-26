@@ -208,11 +208,11 @@ export default function LandingPage() {
               </Badge>
               <h3 className="text-xl font-black">Annuel</h3>
               <p className="mt-4">
-                <span className="text-5xl font-black">708€</span>
-                <span className="font-bold">/an HT</span>
+                <span className="text-5xl font-black">59€</span>
+                <span className="font-bold">/mois HT</span>
               </p>
               <p className="mt-1 text-sm font-bold">
-                Soit 59€/mois au lieu de 79€ — Économisez 240€
+                Facturé 708€/an — Économisez 240€ vs mensuel
               </p>
               <Link href="/signup">
                 <Button variant="default" size="lg" className="mt-6 w-full">

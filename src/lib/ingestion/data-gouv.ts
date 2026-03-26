@@ -1,106 +1,141 @@
 /**
  * Data.gouv.fr ingestion
- * https://www.data.gouv.fr/
  *
- * Open data portal with subsidy datasets:
- * - Subventions versées aux associations (national)
- * - FDVA data
- * - Various regional subsidy datasets
+ * Two datasets:
+ * 1. FRUP — Fondations Reconnues d'Utilité Publique (XLSX)
+ * 2. Fondations d'entreprises (ODS/XLSX)
  *
  * API: https://www.data.gouv.fr/api/1/
  */
 
-const BASE_URL = "https://www.data.gouv.fr/api/1";
+import XLSX from "xlsx";
+import { SOURCES } from "./sources";
 
-// Key datasets for association grants
-const GRANT_DATASETS = [
-  {
-    id: "subventions-associations",
-    searchQuery: "subventions associations",
-    description: "Subventions versées aux associations",
-  },
-  {
-    id: "fdva",
-    searchQuery: "FDVA fonds développement vie associative",
-    description: "FDVA - Fonds pour le Développement de la Vie Associative",
-  },
-  {
-    id: "appels-projets",
-    searchQuery: "appels à projets associations",
-    description: "Appels à projets pour associations",
-  },
-];
+// ─── Theme detection from text ──────────────────────────────────
+const THEME_KEYWORDS: Record<string, RegExp> = {
+  "Éducation": /éducati|enseignement|scola|formation/i,
+  "Santé": /santé|médic|hôpital|soin/i,
+  "Culture": /cultur|art|musé|patrimoine/i,
+  "Solidarité": /solidar|social|aide|secours/i,
+  "Recherche": /recherch|scientif/i,
+  "Environnement": /environnement|écolog|nature|biodiversit/i,
+  "Humanitaire": /humanitaire|développement|international/i,
+  "Jeunesse": /jeune|enfan|adolesc/i,
+  "Sport": /sport|olymp/i,
+  "Logement": /logement|hébergement|habitat/i,
+};
 
-export interface DataGouvDataset {
-  id: string;
-  title: string;
-  description: string;
-  url: string;
-  organization: { name: string } | null;
-  resources: {
-    id: string;
-    title: string;
-    url: string;
-    format: string;
-    filesize: number;
-  }[];
-  created_at: string;
-  last_update: string;
-  tags: string[];
+function detectThemes(text: string): string[] {
+  const themes: string[] = [];
+  for (const [theme, regex] of Object.entries(THEME_KEYWORDS)) {
+    if (regex.test(text)) themes.push(theme);
+  }
+  return themes.length > 0 ? themes : ["Intérêt général"];
 }
 
-/**
- * Search data.gouv.fr for grant-related datasets
- */
-export async function searchGrantDatasets(): Promise<DataGouvDataset[]> {
-  const allDatasets: DataGouvDataset[] = [];
+// ─── Download and parse XLSX/ODS ────────────────────────────────
 
-  for (const dataset of GRANT_DATASETS) {
-    try {
-      const response = await fetch(
-        `${BASE_URL}/datasets/?q=${encodeURIComponent(dataset.searchQuery)}&page_size=10`
-      );
-      if (!response.ok) continue;
+async function downloadAndParseSpreadsheet(url: string): Promise<Record<string, unknown>[]> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to download: ${res.status}`);
 
-      const data = await response.json();
-      allDatasets.push(...(data.data || []));
-
-      console.log(
-        `[data.gouv.fr] "${dataset.searchQuery}": ${data.data?.length || 0} datasets`
-      );
-    } catch (error) {
-      console.warn(`[data.gouv.fr] Error:`, error);
-    }
-
-    await new Promise((r) => setTimeout(r, 300));
-  }
-
-  return allDatasets;
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet);
 }
 
-/**
- * Fetch a specific CSV/JSON resource from data.gouv.fr
- */
-export async function fetchDatasetResource(
-  resourceUrl: string,
-  format: "csv" | "json" = "json"
-): Promise<unknown[]> {
-  const response = await fetch(resourceUrl);
-  if (!response.ok)
-    throw new Error(`Failed to fetch resource: ${response.status}`);
+// ─── FRUP ingestion ─────────────────────────────────────────────
 
-  if (format === "json") {
-    return response.json();
-  }
+export async function fetchFRUP() {
+  const source = SOURCES.find((s) => s.id === "datagouv-frup");
+  if (!source?.apiUrl) throw new Error("FRUP source URL not configured");
 
-  // CSV parsing (basic)
-  const text = await response.text();
-  const lines = text.split("\n");
-  const headers = lines[0]?.split(",").map((h) => h.trim().replace(/"/g, ""));
-  return lines.slice(1).map((line) => {
-    const values = line.split(",").map((v) => v.trim().replace(/"/g, ""));
-    return Object.fromEntries(
-      headers?.map((h, i) => [h, values[i]]) || []
-    );
-  });
+  console.log("[FRUP] Downloading XLSX from data.gouv.fr...");
+  const rows = await downloadAndParseSpreadsheet(source.apiUrl);
+  console.log(`[FRUP] Parsed ${rows.length} fondations`);
+
+  return rows;
+}
+
+export function transformFRUPToGrant(row: Record<string, unknown>, index: number) {
+  const name = String(
+    row["Nom"] || row["NOM"] || row["Dénomination"] || row["denomination"] ||
+    row["DENOMINATION"] || Object.values(row)[0] || `Fondation FRUP #${index}`
+  );
+  const objet = String(row["Objet"] || row["OBJET"] || row["objet"] || row["Objet social"] || "");
+  const ville = String(row["Ville"] || row["VILLE"] || row["Siège"] || "");
+  const dept = String(row["Département"] || row["DEPARTEMENT"] || row["Dept"] || "");
+
+  const themes = detectThemes(`${name} ${objet}`);
+
+  return {
+    sourceUrl: `https://data.gouv.fr/frup/${encodeURIComponent(name.slice(0, 100))}`,
+    sourceName: "data.gouv.fr — FRUP",
+    title: name.slice(0, 300),
+    summary: objet
+      ? `${objet.slice(0, 500)}${ville ? ` — ${ville}` : ""}${dept ? ` (${dept})` : ""}`
+      : `Fondation reconnue d'utilité publique${ville ? ` basée à ${ville}` : ""}.`,
+    rawContent: objet || null,
+    funder: name.slice(0, 200),
+    country: "FR",
+    thematicAreas: themes,
+    eligibleEntities: ["association", "ong"],
+    eligibleCountries: ["FR"],
+    minAmountEur: null,
+    maxAmountEur: null,
+    coFinancingRequired: false,
+    deadline: null,
+    grantType: "fondation",
+    language: "fr",
+    status: "active",
+    aiSummary: null,
+  };
+}
+
+// ─── Fondations d'entreprises ingestion ─────────────────────────
+
+export async function fetchFondationsEntreprises() {
+  const source = SOURCES.find((s) => s.id === "datagouv-fe");
+  if (!source?.apiUrl) throw new Error("FE source URL not configured");
+
+  console.log("[FE] Downloading spreadsheet from data.gouv.fr...");
+  const rows = await downloadAndParseSpreadsheet(source.apiUrl);
+  console.log(`[FE] Parsed ${rows.length} fondations d'entreprises`);
+
+  return rows;
+}
+
+export function transformFEToGrant(row: Record<string, unknown>, index: number) {
+  const name = String(
+    row["Nom"] || row["NOM"] || row["Dénomination"] || row["denomination"] ||
+    row["Nom de la fondation"] || Object.values(row)[0] || `Fondation entreprise #${index}`
+  );
+  const objet = String(row["Objet"] || row["OBJET"] || row["Objet social"] || "");
+  const entreprise = String(row["Entreprise fondatrice"] || row["Fondateur"] || "");
+
+  const themes = detectThemes(`${name} ${objet}`);
+
+  return {
+    sourceUrl: `https://data.gouv.fr/fe/${encodeURIComponent(name.slice(0, 100))}`,
+    sourceName: "data.gouv.fr — Fondations entreprises",
+    title: name.slice(0, 300),
+    summary: objet
+      ? `${objet.slice(0, 500)}${entreprise ? ` — Fondée par ${entreprise}` : ""}`
+      : `Fondation d'entreprise${entreprise ? ` créée par ${entreprise}` : ""}.`,
+    rawContent: objet || null,
+    funder: name.slice(0, 200),
+    country: "FR",
+    thematicAreas: themes,
+    eligibleEntities: ["association", "ong"],
+    eligibleCountries: ["FR"],
+    minAmountEur: null,
+    maxAmountEur: null,
+    coFinancingRequired: false,
+    deadline: null,
+    grantType: "fondation",
+    language: "fr",
+    status: "active",
+    aiSummary: null,
+  };
 }

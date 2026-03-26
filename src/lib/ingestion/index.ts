@@ -20,6 +20,9 @@ import {
 } from "./aides-territoires";
 import { fetchEUOpenCalls, transformEUToGrant } from "./eu-funding";
 import { fetchEuropeAidCalls, transformEuropeAidToGrant } from "./europeaid";
+import { fetchFRUP, transformFRUPToGrant, fetchFondationsEntreprises, transformFEToGrant } from "./data-gouv";
+import { fetchBpiGrants, transformBpiToGrant } from "./bpifrance";
+import { fetchCuratedFoundations, transformCuratedToGrant } from "./fondations-curated";
 
 export interface IngestionResult {
   source: string;
@@ -150,6 +153,34 @@ export async function runFullIngestion(): Promise<IngestionReport> {
     return raw.map(transformEuropeAidToGrant);
   });
   sources.push(ea);
+
+  // 4. data.gouv.fr — FRUP
+  const frup = await ingestSource("data.gouv.fr — FRUP", async () => {
+    const raw = await fetchFRUP();
+    return raw.map((row, i) => transformFRUPToGrant(row, i));
+  });
+  sources.push(frup);
+
+  // 5. data.gouv.fr — Fondations d'entreprises
+  const fe = await ingestSource("data.gouv.fr — Fondations entreprises", async () => {
+    const raw = await fetchFondationsEntreprises();
+    return raw.map((row, i) => transformFEToGrant(row, i));
+  });
+  sources.push(fe);
+
+  // 6. BPI France
+  const bpi = await ingestSource("BPI France", async () => {
+    const raw = await fetchBpiGrants();
+    return raw.map(transformBpiToGrant);
+  });
+  sources.push(bpi);
+
+  // 7. Fondations françaises (curated)
+  const curated = await ingestSource("Fondations françaises (curated)", async () => {
+    const raw = fetchCuratedFoundations();
+    return raw.map(transformCuratedToGrant);
+  });
+  sources.push(curated);
 
   const completedAt = new Date().toISOString();
 

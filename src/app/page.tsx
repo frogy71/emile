@@ -201,6 +201,27 @@ export default function LandingPage() {
           </p>
 
           <div className="mt-12 grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
+            {/* Annual — featured */}
+            <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-8 shadow-[6px_6px_0px_0px_#1a1a1a] relative">
+              <Badge variant="default" className="absolute -top-3 right-4 bg-foreground text-background px-3 py-1 text-xs font-black">
+                -25% 🎉
+              </Badge>
+              <h3 className="text-xl font-black">Annuel</h3>
+              <p className="mt-4">
+                <span className="text-5xl font-black">708€</span>
+                <span className="font-bold">/an HT</span>
+              </p>
+              <p className="mt-1 text-sm font-bold">
+                Soit 59€/mois au lieu de 79€ — Économisez 240€
+              </p>
+              <Link href="/signup">
+                <Button variant="default" size="lg" className="mt-6 w-full">
+                  Commencer — meilleur deal
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+
             {/* Monthly */}
             <div className="rounded-2xl border-2 border-border bg-card p-8 shadow-[4px_4px_0px_0px_#1a1a1a]">
               <h3 className="text-xl font-black">Mensuel</h3>
@@ -214,27 +235,6 @@ export default function LandingPage() {
               <Link href="/signup">
                 <Button variant="outline" size="lg" className="mt-6 w-full">
                   Commencer
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
-
-            {/* Annual */}
-            <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-8 shadow-[6px_6px_0px_0px_#1a1a1a] relative">
-              <Badge variant="default" className="absolute -top-3 right-4 bg-foreground text-background px-3 py-1 text-xs font-black">
-                -25% 🎉
-              </Badge>
-              <h3 className="text-xl font-black">Annuel</h3>
-              <p className="mt-4">
-                <span className="text-5xl font-black">59€</span>
-                <span className="font-bold">/mois HT</span>
-              </p>
-              <p className="mt-1 text-sm font-bold">
-                708€/an au lieu de 948€ — Économisez 240€
-              </p>
-              <Link href="/signup">
-                <Button variant="default" size="lg" className="mt-6 w-full">
-                  Commencer — meilleur deal
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>

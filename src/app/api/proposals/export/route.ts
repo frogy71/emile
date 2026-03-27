@@ -210,10 +210,11 @@ export async function GET(request: Request) {
   });
 
   const buffer = await Packer.toBuffer(doc);
+  const uint8 = new Uint8Array(buffer);
 
   const filename = `Proposition_${orgName.replace(/\s+/g, "_").slice(0, 30)}_${grantTitle.replace(/\s+/g, "_").slice(0, 40)}.docx`;
 
-  return new NextResponse(buffer, {
+  return new NextResponse(uint8, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,

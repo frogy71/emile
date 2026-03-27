@@ -47,8 +47,9 @@ export interface IngestionReport {
  * Insert grants into Supabase via REST API
  * Uses upsert (insert or update on conflict) based on source_url
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function upsertGrants(
-  grants: ReturnType<typeof transformToGrant>[]
+  grants: Record<string, any>[]
 ): Promise<{ inserted: number; skipped: number; errors: number }> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -204,9 +205,10 @@ export async function runFullIngestion(): Promise<IngestionReport> {
 /**
  * Run ingestion for a single source with error handling and DB insert
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function ingestSource(
   name: string,
-  fetchAndTransform: () => Promise<ReturnType<typeof transformToGrant>[]>
+  fetchAndTransform: () => Promise<Record<string, any>[]>
 ): Promise<IngestionResult> {
   const start = Date.now();
   try {

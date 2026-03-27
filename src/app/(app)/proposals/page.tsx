@@ -100,12 +100,12 @@ export default async function ProposalsPage() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 shrink-0 ml-4">
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={`/api/proposals/export?id=${proposal.id}`} download>
+                  <a href={`/api/proposals/export?id=${proposal.id}`} download>
+                    <Button variant="outline" size="sm">
                       <Download className="h-4 w-4" />
                       Exporter .docx
-                    </a>
-                  </Button>
+                    </Button>
+                  </a>
                 </div>
               </div>
             </div>

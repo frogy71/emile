@@ -8,7 +8,7 @@
  * API: https://www.data.gouv.fr/api/1/
  */
 
-import XLSX from "xlsx";
+import * as XLSX from "xlsx";
 import { SOURCES } from "./sources";
 
 // ─── Theme detection from text ──────────────────────────────────

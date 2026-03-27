@@ -43,6 +43,23 @@ export default async function AppLayout({
       redirect("/login");
     }
 
+    // Check if user has an organization — if not, redirect to onboarding
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const serviceCheck = createServiceClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+      const { data: org } = await serviceCheck
+        .from("organizations")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!org) {
+        redirect("/onboarding");
+      }
+    }
+
     // Fetch projects with service role (bypasses RLS)
     if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const serviceClient = createServiceClient(

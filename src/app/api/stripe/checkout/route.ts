@@ -20,6 +20,7 @@ export async function POST(request: Request) {
     const session = await getStripe().checkout.sessions.create({
       customer_email: user.email,
       mode: "subscription",
+      tax_id_collection: { enabled: true },
       line_items: [
         {
           price_data: {
@@ -37,6 +38,11 @@ export async function POST(request: Request) {
           quantity: 1,
         },
       ],
+      custom_text: {
+        submit: {
+          message: "Associations : TVA non applicable (art. 261-7-1° CGI). Le montant affiché est le prix final.",
+        },
+      },
       metadata: {
         user_id: user.id,
         plan,

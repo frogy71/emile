@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, ArrowRight, Clock, Sparkles } from "lucide-react";
+import { FileText, ArrowRight, Clock, Sparkles, Download } from "lucide-react";
 import Link from "next/link";
 
 function getSupabase() {
@@ -100,9 +100,11 @@ export default async function ProposalsPage() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 shrink-0 ml-4">
-                  <Button variant="outline" size="sm">
-                    Voir le brouillon
-                    <ArrowRight className="h-4 w-4" />
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`/api/proposals/export?id=${proposal.id}`} download>
+                      <Download className="h-4 w-4" />
+                      Exporter .docx
+                    </a>
                   </Button>
                 </div>
               </div>

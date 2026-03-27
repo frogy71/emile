@@ -199,6 +199,9 @@ export default function LandingPage() {
           <p className="mt-3 text-center text-muted-foreground font-medium">
             Une subvention décrochée rembourse des années d&apos;abonnement.
           </p>
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Prix HT — TVA non applicable pour les associations (article 261-7-1° du CGI)
+          </p>
 
           <div className="mt-12 grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
             {/* Annual — featured */}

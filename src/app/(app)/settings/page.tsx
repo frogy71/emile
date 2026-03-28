@@ -10,6 +10,10 @@ import { Bell, CreditCard, Check, Sparkles, Loader2, FileText, ExternalLink } fr
 export default function SettingsPage() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [loadingPortal, setLoadingPortal] = useState(false);
+  const [alertFrequency, setAlertFrequency] = useState("weekly");
+  const [alertMinScore, setAlertMinScore] = useState("60");
+  const [alertSaved, setAlertSaved] = useState(false);
+  const [savingAlerts, setSavingAlerts] = useState(false);
 
   async function handleCheckout(plan: "monthly" | "annual") {
     setLoadingPlan(plan);
@@ -57,7 +61,11 @@ export default function SettingsPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="text-sm font-bold mb-1.5 block">Fréquence</label>
-                <select className="flex h-11 w-full rounded-xl border-2 border-border bg-background px-4 py-2 text-sm font-medium">
+                <select
+                  className="flex h-11 w-full rounded-xl border-2 border-border bg-background px-4 py-2 text-sm font-medium"
+                  value={alertFrequency}
+                  onChange={(e) => { setAlertFrequency(e.target.value); setAlertSaved(false); }}
+                >
                   <option value="weekly">Hebdomadaire (recommandé)</option>
                   <option value="daily">Quotidien</option>
                 </select>
@@ -66,13 +74,47 @@ export default function SettingsPage() {
                 <label className="text-sm font-bold mb-1.5 block">
                   Score minimum pour alertes
                 </label>
-                <Input type="number" defaultValue={60} min={0} max={100} />
+                <Input
+                  type="number"
+                  value={alertMinScore}
+                  onChange={(e) => { setAlertMinScore(e.target.value); setAlertSaved(false); }}
+                  min={0}
+                  max={100}
+                />
                 <p className="text-xs text-muted-foreground mt-1">
                   Seules les subventions avec un score ≥ ce seuil déclenchent une alerte
                 </p>
               </div>
             </div>
-            <Button variant="default">Sauvegarder les préférences</Button>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="default"
+                disabled={savingAlerts}
+                onClick={async () => {
+                  setSavingAlerts(true);
+                  try {
+                    const res = await fetch("/api/profile", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        alert_frequency: alertFrequency,
+                        alert_min_score: parseInt(alertMinScore, 10),
+                      }),
+                    });
+                    if (res.ok) setAlertSaved(true);
+                  } catch { /* ignore */ }
+                  setSavingAlerts(false);
+                }}
+              >
+                {savingAlerts ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Sauvegarder les préférences
+              </Button>
+              {alertSaved && (
+                <span className="text-sm font-bold text-green-600 flex items-center gap-1">
+                  <Check className="h-4 w-4" /> Sauvegardé
+                </span>
+              )}
+            </div>
           </CardContent>
         </Card>
 

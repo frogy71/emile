@@ -92,3 +92,48 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ organization: result.data });
 }
+
+/**
+ * PATCH /api/profile — update alert preferences
+ */
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json();
+
+  // Find org
+  const { data: org } = await supabaseAdmin
+    .from("organizations")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!org) {
+    return NextResponse.json({ error: "No organization found" }, { status: 404 });
+  }
+
+  // Upsert alert preferences
+  const { error } = await supabaseAdmin
+    .from("alert_preferences")
+    .upsert({
+      organization_id: org.id,
+      email: user.email || "",
+      frequency: body.alert_frequency || "weekly",
+      min_score: body.alert_min_score || 60,
+      enabled: true,
+    }, { onConflict: "organization_id" });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}

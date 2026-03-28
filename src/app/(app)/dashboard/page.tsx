@@ -1,4 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { redirect } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,47 +24,65 @@ const PROJECT_COLORS = [
   "bg-[#d4b5ff]",
 ];
 
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
-
 export default async function DashboardPage() {
-  const supabase = getSupabase();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // Fetch projects
-  const { data: projects } = await supabase
-    .from("projects")
-    .select("*")
-    .order("created_at", { ascending: false });
+  if (!user) redirect("/login");
 
-  // Fetch stats
-  const { count: grantsCount } = await supabase
-    .from("grants")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "active");
+  // Get user's organization
+  const { data: org } = await supabaseAdmin
+    .from("organizations")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
 
-  const { count: matchCount } = await supabase
-    .from("match_scores")
-    .select("*", { count: "exact", head: true });
+  // Fetch user's projects
+  const { data: projects } = org
+    ? await supabaseAdmin
+        .from("projects")
+        .select("*")
+        .eq("organization_id", org.id)
+        .order("created_at", { ascending: false })
+    : { data: [] };
 
-  const { count: proposalCount } = await supabase
-    .from("proposals")
-    .select("*", { count: "exact", head: true });
-
-  // Upcoming deadlines (next 30 days)
+  // Fetch stats in parallel
   const now = new Date().toISOString().split("T")[0];
   const in30 = new Date(Date.now() + 30 * 86400000)
     .toISOString()
     .split("T")[0];
-  const { count: deadlineCount } = await supabase
-    .from("grants")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "active")
-    .gte("deadline", now)
-    .lte("deadline", in30);
+
+  const [
+    { count: grantsCount },
+    { count: matchCount },
+    { count: proposalCount },
+    { count: deadlineCount },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from("grants")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "active"),
+    org
+      ? supabaseAdmin
+          .from("match_scores")
+          .select("*", { count: "exact", head: true })
+          .eq("organization_id", org.id)
+      : Promise.resolve({ count: 0 }),
+    org
+      ? supabaseAdmin
+          .from("proposals")
+          .select("*", { count: "exact", head: true })
+          .eq("organization_id", org.id)
+      : Promise.resolve({ count: 0 }),
+    supabaseAdmin
+      .from("grants")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "active")
+      .gte("deadline", now)
+      .lte("deadline", in30),
+  ]);
 
   const projectList = projects || [];
 

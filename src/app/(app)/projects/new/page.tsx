@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ArrowLeft, ArrowRight, Target, Users, MapPin, BarChart3, Lightbulb, CheckCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Target, Users, BarChart3, Lightbulb, CheckCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 const STEPS = [
@@ -51,7 +51,9 @@ interface FormData {
   summary: string;
   problem: string;
   themes: string[];
+  customTheme: string;
   geography: string[];
+  customGeo: string;
   budget: string;
   duration_months: string;
   general_objective: string;
@@ -77,7 +79,9 @@ export default function NewProjectPage() {
     summary: "",
     problem: "",
     themes: [],
+    customTheme: "",
     geography: [],
+    customGeo: "",
     budget: "",
     duration_months: "",
     general_objective: "",
@@ -155,12 +159,15 @@ export default function NewProjectPage() {
     setError(null);
 
     try {
+      const allThemes = [...form.themes, ...(form.customTheme ? [form.customTheme] : [])];
+      const allGeo = [...form.geography, ...(form.customGeo ? [form.customGeo] : [])];
+
       const payload = {
         name: form.name,
         summary: form.summary,
         problem: form.problem,
-        themes: form.themes,
-        geography: form.geography,
+        themes: allThemes,
+        geography: allGeo,
         budget: form.budget || null,
         duration_months: form.duration_months || null,
         general_objective: form.general_objective,
@@ -258,7 +265,7 @@ export default function NewProjectPage() {
             <CardContent className="space-y-5">
               <div>
                 <label className="text-sm font-bold mb-1.5 block">
-                  Nom du projet *
+                  Quel est le nom de votre projet ? *
                 </label>
                 <Input
                   placeholder="Ex: Programme d'aide aux réfugiés ukrainiens"
@@ -269,11 +276,12 @@ export default function NewProjectPage() {
 
               <div>
                 <label className="text-sm font-bold mb-1.5 block">
-                  Résumé du projet *
+                  En quoi consiste votre projet ? *
                 </label>
+                <p className="text-xs text-muted-foreground mb-2">Décrivez en quelques phrases ce que vous souhaitez faire concrètement.</p>
                 <textarea
                   className="flex min-h-[100px] w-full rounded-xl border-2 border-border bg-background px-4 py-3 text-sm font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  placeholder="Décrivez votre projet en 2-3 phrases..."
+                  placeholder="Ex: Nous souhaitons mettre en place un programme d'accueil et d'accompagnement pour les familles réfugiées..."
                   value={form.summary}
                   onChange={(e) => updateField("summary", e.target.value)}
                 />
@@ -281,20 +289,22 @@ export default function NewProjectPage() {
 
               <div>
                 <label className="text-sm font-bold mb-1.5 block">
-                  Problème identifié *
+                  Quel problème cherchez-vous à résoudre ? *
                 </label>
+                <p className="text-xs text-muted-foreground mb-2">Décrivez la situation actuelle et pourquoi il est important d&apos;agir.</p>
                 <textarea
                   className="flex min-h-[100px] w-full rounded-xl border-2 border-border bg-background px-4 py-3 text-sm font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  placeholder="Quel problème votre projet cherche-t-il à résoudre ? Quelles sont les causes ?"
+                  placeholder="Ex: De nombreuses familles déplacées n'ont pas accès aux services de base..."
                   value={form.problem}
                   onChange={(e) => updateField("problem", e.target.value)}
                 />
               </div>
 
               <div>
-                <label className="text-sm font-bold mb-3 block">
-                  Thématiques *
+                <label className="text-sm font-bold mb-1.5 block">
+                  Dans quelles thématiques s&apos;inscrit votre projet ? *
                 </label>
+                <p className="text-xs text-muted-foreground mb-3">Sélectionnez une ou plusieurs thématiques. Cela nous aidera à trouver les subventions les plus pertinentes.</p>
                 <div className="flex flex-wrap gap-2">
                   {THEMATIC_OPTIONS.map((theme) => (
                     <button
@@ -323,12 +333,20 @@ export default function NewProjectPage() {
                     </button>
                   ))}
                 </div>
+                <div className="mt-3">
+                  <Input
+                    placeholder="Autre thématique ? Précisez ici..."
+                    value={form.customTheme}
+                    onChange={(e) => updateField("customTheme", e.target.value)}
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="text-sm font-bold mb-3 block">
-                  Zones géographiques *
+                <label className="text-sm font-bold mb-1.5 block">
+                  Où se déroule votre projet ? *
                 </label>
+                <p className="text-xs text-muted-foreground mb-3">Sélectionnez les zones géographiques concernées.</p>
                 <div className="flex flex-wrap gap-2">
                   {GEO_OPTIONS.map((geo) => (
                     <button
@@ -343,6 +361,13 @@ export default function NewProjectPage() {
                       {geo}
                     </button>
                   ))}
+                </div>
+                <div className="mt-3">
+                  <Input
+                    placeholder="Autre zone ? Précisez (ex: Liban, Haïti...)"
+                    value={form.customGeo}
+                    onChange={(e) => updateField("customGeo", e.target.value)}
+                  />
                 </div>
               </div>
 
@@ -394,17 +419,18 @@ export default function NewProjectPage() {
                 Objectifs (SMART)
               </CardTitle>
               <CardDescription>
-                Définissez l&apos;objectif général et les objectifs spécifiques
+                Quel changement votre projet veut-il produire ?
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div>
                 <label className="text-sm font-bold mb-1.5 block">
-                  Objectif général *
+                  Quel est l&apos;objectif principal de votre projet ? *
                 </label>
+                <p className="text-xs text-muted-foreground mb-2">Le changement global que vous souhaitez produire à long terme.</p>
                 <textarea
                   className="flex min-h-[80px] w-full rounded-xl border-2 border-border bg-background px-4 py-3 text-sm font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  placeholder="L'objectif de haut niveau auquel votre projet contribue..."
+                  placeholder="Ex: Réduire l'isolement des familles réfugiées et faciliter leur intégration"
                   value={form.general_objective}
                   onChange={(e) =>
                     updateField("general_objective", e.target.value)
@@ -414,7 +440,7 @@ export default function NewProjectPage() {
 
               <div>
                 <label className="text-sm font-bold mb-1.5 block">
-                  Objectif spécifique 1 *
+                  Objectif concret 1 *
                 </label>
                 <Input
                   placeholder="Ex: Améliorer l'accès aux soins pour 500 familles déplacées"
@@ -425,7 +451,7 @@ export default function NewProjectPage() {
 
               <div>
                 <label className="text-sm font-bold mb-1.5 block">
-                  Objectif spécifique 2
+                  Objectif concret 2 (optionnel)
                 </label>
                 <Input
                   placeholder="Ex: Former 50 travailleurs sociaux locaux"
@@ -436,7 +462,7 @@ export default function NewProjectPage() {
 
               <div>
                 <label className="text-sm font-bold mb-1.5 block">
-                  Objectif spécifique 3
+                  Objectif concret 3 (optionnel)
                 </label>
                 <Input
                   placeholder="Optionnel"
@@ -470,14 +496,15 @@ export default function NewProjectPage() {
                 Bénéficiaires
               </CardTitle>
               <CardDescription>
-                Qui sont les bénéficiaires directs et indirects ?
+                À qui votre projet s&apos;adresse-t-il ?
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div>
                 <label className="text-sm font-bold mb-1.5 block">
-                  Bénéficiaires directs *
+                  Qui bénéficiera directement de votre projet ? *
                 </label>
+                <p className="text-xs text-muted-foreground mb-2">Les personnes ou groupes qui recevront directement l&apos;aide ou les services.</p>
                 <textarea
                   className="flex min-h-[80px] w-full rounded-xl border-2 border-border bg-background px-4 py-3 text-sm font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   placeholder="Ex: 500 familles déplacées d'Ukraine vivant en Île-de-France"
@@ -541,14 +568,14 @@ export default function NewProjectPage() {
                 Activités principales
               </CardTitle>
               <CardDescription>
-                Les activités clés que vous allez mettre en œuvre
+                Que allez-vous faire concrètement pour atteindre vos objectifs ?
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {[1, 2, 3, 4].map((i) => (
                 <div key={i}>
                   <label className="text-sm font-bold mb-1.5 block">
-                    Activité {i} {i <= 2 ? "*" : "(optionnel)"}
+                    Activité {i} {i === 1 ? "*" : "(optionnel)"}
                   </label>
                   <Input
                     placeholder={
@@ -556,7 +583,7 @@ export default function NewProjectPage() {
                         ? "Ex: Mise en place de permanences d'accueil"
                         : i === 2
                         ? "Ex: Sessions de formation professionnelle"
-                        : ""
+                        : "Ajoutez une activité supplémentaire..."
                     }
                     value={form.activities[i - 1]}
                     onChange={(e) => updateActivity(i - 1, e.target.value)}
@@ -613,7 +640,7 @@ export default function NewProjectPage() {
                 Résultats attendus & Indicateurs
               </CardTitle>
               <CardDescription>
-                Quels résultats attendez-vous et comment les mesurer ?
+                Comment saurez-vous que votre projet a réussi ?
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">

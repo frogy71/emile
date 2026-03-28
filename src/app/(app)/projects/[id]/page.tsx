@@ -1,5 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
-import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { notFound, redirect } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,13 +22,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import Link from "next/link";
-
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
+import { ProjectActions } from "@/components/project-actions";
 
 function getScoreColor(score: number) {
   if (score >= 75) return "bg-[#c8f76f]";
@@ -47,32 +42,37 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = getSupabase();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // Fetch project
-  const { data: project, error } = await supabase
+  if (!user) redirect("/login");
+
+  // Fetch project and verify ownership
+  const { data: project, error } = await supabaseAdmin
     .from("projects")
-    .select("*")
+    .select("*, organizations!inner(user_id)")
     .eq("id", id)
     .single();
 
-  if (!project || error) {
+  if (!project || error || (project.organizations as unknown as { user_id: string })?.user_id !== user.id) {
     notFound();
   }
 
-  // Fetch linked proposals with grant info
-  const { data: proposals } = await supabase
-    .from("proposals")
-    .select("*, grants(id, title, funder, deadline)")
-    .eq("project_id", id)
-    .order("created_at", { ascending: false });
-
-  // Fetch match scores with grant info
-  const { data: matchScores } = await supabase
-    .from("match_scores")
-    .select("*, grants(id, title, funder, deadline, max_amount_eur, source_name)")
-    .eq("project_id", id)
-    .order("score", { ascending: false });
+  // Fetch linked proposals and match scores in parallel
+  const [{ data: proposals }, { data: matchScores }] = await Promise.all([
+    supabaseAdmin
+      .from("proposals")
+      .select("*, grants(id, title, funder, deadline)")
+      .eq("project_id", id)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("match_scores")
+      .select("*, grants(id, title, funder, deadline, max_amount_eur, source_name)")
+      .eq("project_id", id)
+      .order("score", { ascending: false }),
+  ]);
 
   const proposalList = proposals || [];
   const matchList = matchScores || [];
@@ -101,12 +101,15 @@ export default async function ProjectDetailPage({
             )}
           </div>
         </div>
-        <Link href={`/grants?project_id=${project.id}`}>
-          <Button variant="accent">
-            <Sparkles className="h-4 w-4" />
-            Trouver des subventions
-          </Button>
-        </Link>
+        <div className="flex flex-col items-end gap-2">
+          <Link href={`/grants?project_id=${project.id}`}>
+            <Button variant="accent">
+              <Sparkles className="h-4 w-4" />
+              Trouver des subventions
+            </Button>
+          </Link>
+          <ProjectActions projectId={project.id} projectName={project.name} />
+        </div>
       </div>
 
       {/* Key metrics row */}

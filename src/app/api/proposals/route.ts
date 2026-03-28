@@ -92,6 +92,7 @@ export async function POST(request: Request) {
           requestedAmountEur: project.requested_amount_eur,
           durationMonths: project.duration_months,
           indicators: project.indicators,
+          logframe: project.logframe_data || undefined,
         }
       : undefined,
     grant: {
@@ -100,6 +101,10 @@ export async function POST(request: Request) {
       funder: grant.funder,
       country: grant.country,
       language: grant.language,
+      thematicAreas: grant.thematic_areas,
+      eligibleEntities: grant.eligible_entities,
+      maxAmountEur: grant.max_amount_eur,
+      coFinancingRequired: grant.co_financing_required,
     },
     matchAnalysis,
   });

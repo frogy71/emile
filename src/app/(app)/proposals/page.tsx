@@ -1,24 +1,34 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { redirect } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileText, ArrowRight, Clock, Sparkles, Download } from "lucide-react";
 import Link from "next/link";
 
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
-
 export default async function ProposalsPage() {
-  const supabase = getSupabase();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const { data: proposals } = await supabase
-    .from("proposals")
-    .select("*, grants(title, funder, deadline), projects(name)")
-    .order("created_at", { ascending: false });
+  if (!user) redirect("/login");
+
+  // Get user's organization
+  const { data: org } = await supabaseAdmin
+    .from("organizations")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+
+  const { data: proposals } = org
+    ? await supabaseAdmin
+        .from("proposals")
+        .select("*, grants(title, funder, deadline), projects(name)")
+        .eq("organization_id", org.id)
+        .order("created_at", { ascending: false })
+    : { data: [] };
 
   const proposalList = proposals || [];
 

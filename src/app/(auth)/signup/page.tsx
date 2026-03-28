@@ -12,6 +12,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -21,7 +22,7 @@ export default function SignupPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -35,8 +36,16 @@ export default function SignupPage() {
       return;
     }
 
-    router.push("/dashboard");
-    router.refresh();
+    // If session exists, user is logged in (email confirmation disabled)
+    if (data.session) {
+      router.push("/dashboard");
+      router.refresh();
+    } else {
+      // Email confirmation required — show message
+      setError("");
+      setLoading(false);
+      setSuccess("Compte créé ! Vérifiez votre email pour confirmer votre inscription.");
+    }
   }
 
   async function handleGoogleLogin() {
@@ -49,6 +58,7 @@ export default function SignupPage() {
     });
     if (error) {
       setError(error.message);
+      setLoading(false);
     }
   }
 
@@ -135,7 +145,10 @@ export default function SignupPage() {
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}
-            <Button type="submit" className="w-full" disabled={loading}>
+            {success && (
+              <p className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">{success}</p>
+            )}
+            <Button type="submit" className="w-full" disabled={loading || !!success}>
               {loading ? "Création..." : "Créer mon compte"}
             </Button>
           </form>

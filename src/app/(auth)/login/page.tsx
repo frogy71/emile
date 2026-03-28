@@ -61,6 +61,7 @@ function LoginForm() {
     });
     if (error) {
       setError(error.message);
+      setLoading(false);
     }
   }
 

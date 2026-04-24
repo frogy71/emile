@@ -274,8 +274,17 @@ export async function reconcileFoundationPortals(
       if (!prior) {
         // New AAP — will be inserted. We attach the event AFTER insert so
         // we have the grant_id. Defer via a sentinel in grantInserts.
+        //
+        // Append a stable fragment to source_url so two AAP from the same
+        // foundation (which often share the same landing-page URL when we
+        // couldn't resolve a deep link) don't collide on the grants
+        // source_url UNIQUE constraint. Browsers just ignore the fragment,
+        // so "Voir chez le bailleur" links continue to work unchanged.
+        const sourceUrlForDb = c.url.includes("#")
+          ? c.url
+          : `${c.url}#emile-aap-${key.slice(0, 10)}`;
         grantInserts.push({
-          source_url: c.url,
+          source_url: sourceUrlForDb,
           source_name: SOURCE_NAME,
           title: c.title,
           summary: c.summary,
@@ -466,11 +475,15 @@ export async function reconcileFoundationPortals(
     // We can't use ON CONFLICT here because the uniqueness guarantee in
     // the schema is a *partial* unique index (WHERE portal_stable_key IS
     // NOT NULL), which Postgres won't let us target in ON CONFLICT.
+    //
+    // Done one row at a time so that an occasional 23505 (unique violation
+    // on source_url or portal_stable_key) doesn't nuke the whole batch —
+    // we just log and move on. This is robust against crawler noise like
+    // the LLM hallucinating an identical URL for two different calls.
     const { url, key } = creds();
-    try {
-      const res = await fetch(
-        `${url}/rest/v1/grants`,
-        {
+    for (const row of grantInserts) {
+      try {
+        const res = await fetch(`${url}/rest/v1/grants`, {
           method: "POST",
           headers: {
             apikey: key,
@@ -478,31 +491,39 @@ export async function reconcileFoundationPortals(
             "Content-Type": "application/json",
             Prefer: "return=representation",
           },
-          body: JSON.stringify(grantInserts),
+          body: JSON.stringify([row]),
+        });
+        if (res.ok) {
+          const inserted = (await res.json()) as Array<{
+            id: string;
+            portal_stable_key: string;
+          }>;
+          for (const r of inserted) {
+            events.push({
+              grant_id: r.id,
+              event_type: "opened",
+              detected_at: now.toISOString(),
+              new_status: "active",
+              crawl_run_id: runId,
+            });
+          }
+        } else {
+          const errText = await res.text().catch(() => "");
+          // Expected: 23505 duplicate when two calls share a landing URL
+          // and the fragment-suffix trick couldn't fully de-dupe them.
+          if (errText.includes("23505")) {
+            console.warn(
+              `[reconciler] grant insert skipped (duplicate): ${String(
+                row.title
+              ).slice(0, 80)}`
+            );
+          } else {
+            console.error("[reconciler] grant insert failed", errText);
+          }
         }
-      );
-      if (res.ok) {
-        const inserted = (await res.json()) as Array<{
-          id: string;
-          portal_stable_key: string;
-        }>;
-        for (const row of inserted) {
-          events.push({
-            grant_id: row.id,
-            event_type: "opened",
-            detected_at: now.toISOString(),
-            new_status: "active",
-            crawl_run_id: runId,
-          });
-        }
-      } else {
-        console.error(
-          "[reconciler] grant insert failed",
-          await res.text().catch(() => "")
-        );
+      } catch (e) {
+        console.error("[reconciler] grant insert exception", e);
       }
-    } catch (e) {
-      console.error("[reconciler] grant insert exception", e);
     }
   }
 

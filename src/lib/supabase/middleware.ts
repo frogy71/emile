@@ -44,7 +44,7 @@ export async function updateSession(request: NextRequest) {
   // Redirect unauthenticated users to login (except public routes)
   const publicRoutes = ["/", "/login", "/signup", "/auth/callback"];
   // Public API routes (webhooks, cron jobs, ingestion)
-  const publicApiRoutes = ["/api/stripe/webhook", "/api/alerts", "/api/alerts/send", "/api/ingestion", "/api/cron"];
+  const publicApiRoutes = ["/api/stripe/webhook", "/api/alerts", "/api/alerts/send", "/api/ingest", "/api/cron"];
   const isPublicRoute = publicRoutes.some(
     (route) => request.nextUrl.pathname === route
   ) ||

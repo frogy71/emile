@@ -109,6 +109,18 @@ interface AdminStats {
     conversionRate: number;
     totalPayingOrgs: number;
   };
+  kpis?: {
+    conversion14d: { cohortSize: number; converted: number; rate: number } | null;
+    churnM2: { cohortSize: number; cancelled: number; rate: number } | null;
+    partnerships: { signed: number; discussing: number; prospect: number };
+  };
+  partnerships?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    status: string;
+    signedAt: string | null;
+  }>;
   sources: SourceStat[];
 }
 
@@ -523,6 +535,137 @@ export default function AdminDashboard() {
                   </p>
                 </div>
               </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* KPIs critiques : conversion 14j, churn M2, partenariats */}
+      {stats?.kpis && (
+        <>
+          <h2 className="text-xl font-black mb-4">KPIs critiques</h2>
+          <div className="grid gap-4 md:grid-cols-3 mb-4">
+            {/* Conversion 14j — cible >3% */}
+            <div
+              className={`rounded-2xl border-2 border-border p-5 shadow-[4px_4px_0px_0px_#1a1a1a] ${
+                (stats.kpis.conversion14d?.rate ?? 0) >= 3
+                  ? "bg-[#c8f76f]"
+                  : (stats.kpis.conversion14d?.rate ?? 0) >= 1
+                  ? "bg-[#ffe066]"
+                  : "bg-[#ffa3d1]"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <TrendingUp className="h-6 w-6" />
+                <div>
+                  <p className="text-2xl font-black">
+                    {stats.kpis.conversion14d?.rate ?? 0}%
+                  </p>
+                  <p className="text-xs font-bold">
+                    Conversion free → payant à 14j
+                  </p>
+                  <p className="text-xs font-medium mt-1 opacity-75">
+                    {stats.kpis.conversion14d?.converted ?? 0} /{" "}
+                    {stats.kpis.conversion14d?.cohortSize ?? 0} · cible &gt;3%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Churn M2 — cible <10%/mois */}
+            <div
+              className={`rounded-2xl border-2 border-border p-5 shadow-[4px_4px_0px_0px_#1a1a1a] ${
+                (stats.kpis.churnM2?.rate ?? 0) <= 10
+                  ? "bg-[#c8f76f]"
+                  : (stats.kpis.churnM2?.rate ?? 0) <= 20
+                  ? "bg-[#ffe066]"
+                  : "bg-[#ffa3d1]"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-6 w-6" />
+                <div>
+                  <p className="text-2xl font-black">
+                    {stats.kpis.churnM2?.rate ?? 0}%
+                  </p>
+                  <p className="text-xs font-bold">Churn mois 2</p>
+                  <p className="text-xs font-medium mt-1 opacity-75">
+                    {stats.kpis.churnM2?.cancelled ?? 0} /{" "}
+                    {stats.kpis.churnM2?.cohortSize ?? 0} · cible &lt;10%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Partenariats */}
+            <div className="rounded-2xl border-2 border-border bg-[#a3d5ff] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <div className="flex items-center gap-3">
+                <Shield className="h-6 w-6" />
+                <div>
+                  <p className="text-2xl font-black">
+                    {stats.kpis.partnerships.signed}
+                  </p>
+                  <p className="text-xs font-bold">Partenariats signés</p>
+                  <p className="text-xs font-medium mt-1 opacity-75">
+                    {stats.kpis.partnerships.discussing} en discussion ·{" "}
+                    {stats.kpis.partnerships.prospect} prospects
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Partnerships list */}
+          {stats.partnerships && stats.partnerships.length > 0 && (
+            <div className="rounded-2xl border-2 border-border bg-card p-5 shadow-[4px_4px_0px_0px_#1a1a1a] mb-8">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
+                Pipeline partenariats
+              </p>
+              <div className="space-y-2">
+                {stats.partnerships.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold">{p.name}</span>
+                      <Badge
+                        variant={
+                          p.status === "signed"
+                            ? "green"
+                            : p.status === "discussing"
+                            ? "purple"
+                            : "default"
+                        }
+                      >
+                        {p.status}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground font-medium">
+                        {p.type}
+                      </span>
+                    </div>
+                    {p.signedAt && (
+                      <span className="text-xs text-muted-foreground font-medium">
+                        signé le{" "}
+                        {new Date(p.signedAt).toLocaleDateString("fr-FR")}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground font-medium mt-3">
+                Pour ajouter une ligne : insert dans la table{" "}
+                <code className="bg-muted px-1 rounded">partnerships</code> via
+                Supabase SQL Editor.
+              </p>
+            </div>
+          )}
+          {stats.partnerships && stats.partnerships.length === 0 && (
+            <div className="rounded-2xl border-2 border-border bg-muted/30 p-5 mb-8 text-sm text-muted-foreground">
+              Aucun partenariat enregistré. Ajoute des lignes dans la table{" "}
+              <code className="bg-muted px-1 rounded">partnerships</code> depuis
+              Supabase pour suivre ton pipeline de distribution (URIOPSS, CPCA,
+              fédérations…).
             </div>
           )}
         </>

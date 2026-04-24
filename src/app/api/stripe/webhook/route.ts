@@ -35,9 +35,12 @@ export async function POST(request: Request) {
       const session = event.data.object;
       const userId = session.metadata?.user_id;
       const plan = session.metadata?.plan || "monthly";
+      const nowIso = new Date().toISOString();
 
       if (userId) {
-        // Update organization subscription status
+        // Only set plan_started_at the first time we activate this org. If the
+        // org previously cancelled and is re-activating, we reset the start so
+        // churn cohorts are based on the current subscription lifecycle.
         await supabase
           .from("organizations")
           .update({
@@ -45,6 +48,8 @@ export async function POST(request: Request) {
             stripe_subscription_id: session.subscription as string,
             plan,
             plan_status: "active",
+            plan_started_at: nowIso,
+            plan_cancelled_at: null,
           })
           .eq("user_id", userId);
       }
@@ -54,11 +59,16 @@ export async function POST(request: Request) {
     case "customer.subscription.updated": {
       const subscription = event.data.object;
       const customerId = subscription.customer as string;
+      const isActive = subscription.status === "active";
 
       await supabase
         .from("organizations")
         .update({
-          plan_status: subscription.status === "active" ? "active" : "inactive",
+          plan_status: isActive ? "active" : "inactive",
+          // If the subscription is now inactive (payment failed, paused...),
+          // record the date for churn analytics. If it goes back active we
+          // clear the cancellation timestamp.
+          plan_cancelled_at: isActive ? null : new Date().toISOString(),
         })
         .eq("stripe_customer_id", customerId);
       break;
@@ -72,6 +82,7 @@ export async function POST(request: Request) {
         .from("organizations")
         .update({
           plan_status: "cancelled",
+          plan_cancelled_at: new Date().toISOString(),
         })
         .eq("stripe_customer_id", customerId);
       break;

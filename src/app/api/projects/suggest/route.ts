@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { logAiUsage } from "@/lib/ai/usage-tracker";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /**
  * POST /api/projects/suggest — extract a structured project draft from a free
@@ -43,6 +44,21 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const rl = await checkRateLimit(
+    user.id,
+    "project_suggest",
+    RATE_LIMITS.project_suggest
+  );
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "rate_limited", message: rl.message },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rl.retryAfterSec) },
+      }
+    );
   }
 
   let body: { description?: string };

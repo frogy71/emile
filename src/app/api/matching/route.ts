@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { computeMatchScore } from "@/lib/ai/scoring";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 function getSupabase() {
   return createClient(
@@ -31,6 +32,25 @@ export async function POST(request: Request) {
 
   if (!org) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  // Rate limit per user — scoring bursts during bulk matching are fine,
+  // but we still cap to protect AI costs against runaway loops.
+  if (org.user_id) {
+    const rl = await checkRateLimit(
+      org.user_id,
+      "scoring",
+      RATE_LIMITS.scoring
+    );
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "rate_limited", message: rl.message },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSec) },
+        }
+      );
+    }
   }
 
   // Fetch grant

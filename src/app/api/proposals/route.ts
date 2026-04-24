@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { generateProposal } from "@/lib/ai/proposal";
 import { createClient } from "@supabase/supabase-js";
 import { getPlanState } from "@/lib/billing";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 function getSupabase() {
   return createClient(
@@ -51,6 +52,24 @@ export async function POST(request: Request) {
         { error: "Organization not found", detail: orgError?.message },
         { status: 404 }
       );
+    }
+
+    // Rate limit proposal generation per user — expensive Sonnet calls.
+    if (org.user_id) {
+      const rl = await checkRateLimit(
+        org.user_id,
+        "proposal",
+        RATE_LIMITS.proposal
+      );
+      if (!rl.ok) {
+        return NextResponse.json(
+          { error: "rate_limited", message: rl.message },
+          {
+            status: 429,
+            headers: { "Retry-After": String(rl.retryAfterSec) },
+          }
+        );
+      }
     }
 
     // Fetch grant

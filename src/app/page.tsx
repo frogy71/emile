@@ -13,9 +13,63 @@ import {
   Check,
 } from "lucide-react";
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_APP_URL || "https://grant-finder-kappa.vercel.app";
+
+const STRUCTURED_DATA = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}#organization`,
+      name: "Emile",
+      url: SITE_URL,
+      description:
+        "Copilote IA pour trouver et décrocher des subventions pour les ONG et associations.",
+      sameAs: [],
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}#website`,
+      url: SITE_URL,
+      name: "Emile — Copilote financement ONG",
+      inLanguage: "fr-FR",
+      publisher: { "@id": `${SITE_URL}#organization` },
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "Emile",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      description:
+        "Trouve des subventions, matching IA, génération de propositions pour les ONG et associations.",
+      offers: [
+        {
+          "@type": "Offer",
+          price: "79",
+          priceCurrency: "EUR",
+          name: "Emile Pro — Mensuel",
+          url: `${SITE_URL}/pricing`,
+        },
+        {
+          "@type": "Offer",
+          price: "59",
+          priceCurrency: "EUR",
+          name: "Emile Pro — Annuel (par mois)",
+          url: `${SITE_URL}/pricing`,
+        },
+      ],
+    },
+  ],
+};
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
+      />
       {/* Nav */}
       <nav className="border-b-2 border-border">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
@@ -301,12 +355,13 @@ export default function LandingPage() {
       <footer className="border-t-2 border-border py-8">
         <div className="mx-auto max-w-6xl px-6 flex flex-wrap items-center justify-between gap-4 text-sm font-medium text-muted-foreground">
           <p>&copy; {new Date().getFullYear()} Emile — Copilote financement ONG.</p>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
             <Link href="/pricing" className="hover:text-foreground">Tarifs</Link>
             <Link href="/login" className="hover:text-foreground">Connexion</Link>
-            <a href="mailto:francois@tresorier.co" className="hover:text-foreground">
-              Contact
-            </a>
+            <Link href="/legal/contact" className="hover:text-foreground">Contact</Link>
+            <Link href="/legal/cgu" className="hover:text-foreground">CGU</Link>
+            <Link href="/legal/privacy" className="hover:text-foreground">Confidentialité</Link>
+            <Link href="/legal/mentions" className="hover:text-foreground">Mentions légales</Link>
           </div>
         </div>
       </footer>

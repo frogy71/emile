@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { enrichProposal } from "@/lib/ai/proposal";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 type ProposalSection = { title: string; content: string };
 
@@ -62,6 +63,18 @@ export async function POST(
 
     if (org?.user_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    // Rate limit enrichment per user.
+    const rl = await checkRateLimit(user.id, "enrich", RATE_LIMITS.enrich);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "rate_limited", message: rl.message },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSec) },
+        }
+      );
     }
 
     // Validate body

@@ -182,6 +182,99 @@ export async function GET(request: Request) {
     console.warn("AI cost summary unavailable:", e);
   }
 
+  // --- 14-day conversion cohort ---
+  // Among users who signed up >14d ago, what % have a paying plan today?
+  // (Imperfect — a user who converted on day 3 then cancelled will still
+  // count as non-converted today. Good enough for directional signal.)
+  let conversion14d = null;
+  try {
+    const now = Date.now();
+    const fourteenDaysAgo = new Date(now - 14 * 86400_000);
+    const eligibleCohort = (users || []).filter(
+      (u) => new Date(u.created_at) <= fourteenDaysAgo
+    );
+    if (eligibleCohort.length > 0) {
+      const eligibleIds = eligibleCohort.map((u) => u.id);
+      const { data: converted } = await supabase
+        .from("organizations")
+        .select("user_id, plan_started_at")
+        .in("user_id", eligibleIds)
+        .eq("plan_status", "active");
+      const convertedCount = (converted || []).length;
+      conversion14d = {
+        cohortSize: eligibleCohort.length,
+        converted: convertedCount,
+        rate:
+          Math.round((convertedCount / eligibleCohort.length) * 1000) / 10,
+      };
+    } else {
+      conversion14d = { cohortSize: 0, converted: 0, rate: 0 };
+    }
+  } catch (e) {
+    console.warn("14-day conversion unavailable:", e);
+  }
+
+  // --- Churn M2 ---
+  // Among orgs that started paying between 60 and 90 days ago, what % have
+  // since cancelled? Gives us a trailing "month 2" churn signal.
+  let churnM2 = null;
+  try {
+    const now = Date.now();
+    const ninety = new Date(now - 90 * 86400_000).toISOString();
+    const sixty = new Date(now - 60 * 86400_000).toISOString();
+    const { data: startedOrgs } = await supabase
+      .from("organizations")
+      .select("id, plan_status, plan_cancelled_at, plan_started_at")
+      .gte("plan_started_at", ninety)
+      .lte("plan_started_at", sixty);
+    const cohort = startedOrgs || [];
+    const cancelled = cohort.filter(
+      (o) => o.plan_status !== "active" || !!o.plan_cancelled_at
+    ).length;
+    churnM2 = {
+      cohortSize: cohort.length,
+      cancelled,
+      rate:
+        cohort.length > 0
+          ? Math.round((cancelled / cohort.length) * 1000) / 10
+          : 0,
+    };
+  } catch (e) {
+    console.warn("Churn M2 unavailable:", e);
+  }
+
+  // --- Partnerships tracker ---
+  let partnerships: {
+    id: string;
+    name: string;
+    type: string;
+    status: string;
+    signedAt: string | null;
+  }[] = [];
+  let partnershipsStats = { signed: 0, discussing: 0, prospect: 0 };
+  try {
+    const { data: pRows } = await supabase
+      .from("partnerships")
+      .select("id, name, type, status, signed_at")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    partnerships =
+      pRows?.map((p) => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        status: p.status,
+        signedAt: p.signed_at,
+      })) ?? [];
+    partnershipsStats = {
+      signed: partnerships.filter((p) => p.status === "signed").length,
+      discussing: partnerships.filter((p) => p.status === "discussing").length,
+      prospect: partnerships.filter((p) => p.status === "prospect").length,
+    };
+  } catch (e) {
+    console.warn("Partnerships tracker unavailable:", e);
+  }
+
   return NextResponse.json({
     grants: {
       total: totalGrants || 0,
@@ -213,6 +306,12 @@ export async function GET(request: Request) {
       conversionRate,
       totalPayingOrgs,
     },
+    kpis: {
+      conversion14d,
+      churnM2,
+      partnerships: partnershipsStats,
+    },
+    partnerships,
     sources: sourceStats,
   });
 }

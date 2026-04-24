@@ -1,7 +1,22 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Check, Sparkles, Zap } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Tarifs — 79€/mois pour trouver vos subventions",
+  description:
+    "Emile Pro : 79€ HT/mois (59€ HT en annuel). Matching IA illimité sur 2 000+ subventions FR + EU, propositions générées, alertes deadline. Essai gratuit.",
+  alternates: { canonical: "/pricing" },
+  openGraph: {
+    title: "Tarifs Emile — 79€/mois pour trouver vos subventions",
+    description:
+      "Matching IA illimité, propositions générées, alertes deadline. Essai gratuit, sans carte.",
+    url: "/pricing",
+    type: "website",
+  },
+};
 
 /**
  * /pricing — public pricing page.
@@ -197,16 +212,12 @@ export default function PricingPage() {
       <footer className="border-t-2 border-border">
         <div className="mx-auto max-w-6xl px-6 py-8 flex flex-wrap items-center justify-between gap-4 text-sm font-medium text-muted-foreground">
           <p>© {new Date().getFullYear()} Emile — Copilote financement ONG.</p>
-          <div className="flex items-center gap-4">
-            <Link href="/" className="hover:text-foreground">
-              Accueil
-            </Link>
-            <a
-              href="mailto:francois@tresorier.co"
-              className="hover:text-foreground"
-            >
-              Contact
-            </a>
+          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+            <Link href="/" className="hover:text-foreground">Accueil</Link>
+            <Link href="/legal/contact" className="hover:text-foreground">Contact</Link>
+            <Link href="/legal/cgu" className="hover:text-foreground">CGU</Link>
+            <Link href="/legal/privacy" className="hover:text-foreground">Confidentialité</Link>
+            <Link href="/legal/mentions" className="hover:text-foreground">Mentions</Link>
           </div>
         </div>
       </footer>

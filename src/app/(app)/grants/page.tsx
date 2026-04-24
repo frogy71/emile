@@ -16,6 +16,7 @@ import {
   Filter,
   X,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 
 type Grant = {
@@ -100,6 +101,9 @@ export default function GrantsPage() {
   const [territory, setTerritory] = useState("");
   const [page, setPage] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const [relaxed, setRelaxed] = useState(false);
+  const [relaxedLabel, setRelaxedLabel] = useState<string | null>(null);
+  const [relaxedFilters, setRelaxedFilters] = useState<string[]>([]);
   const limit = 20;
 
   const fetchGrants = useCallback(async () => {
@@ -117,9 +121,15 @@ export default function GrantsPage() {
       const data = await res.json();
       setGrants(data.grants || []);
       setTotal(data.total || 0);
+      setRelaxed(Boolean(data.relaxed));
+      setRelaxedLabel(data.relaxedLabel || null);
+      setRelaxedFilters(Array.isArray(data.relaxedFilters) ? data.relaxedFilters : []);
     } catch {
       setGrants([]);
       setTotal(0);
+      setRelaxed(false);
+      setRelaxedLabel(null);
+      setRelaxedFilters([]);
     } finally {
       setLoading(false);
     }
@@ -295,6 +305,32 @@ export default function GrantsPage() {
         </div>
       )}
 
+      {/* Relaxation banner — tells the user we broadened the search rather
+          than showing them an empty page. Mirrors the API's `relaxed` flag. */}
+      {!loading && relaxed && grants.length > 0 && (
+        <div className="mb-4 flex items-start gap-3 rounded-2xl border-2 border-border bg-[#fff5d1] p-4 shadow-[3px_3px_0px_0px_#1a1a1a]">
+          <Sparkles className="h-5 w-5 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-black">
+              Aucun résultat strict — on a élargi la recherche pour toi
+            </p>
+            <p className="text-xs font-semibold text-muted-foreground mt-0.5">
+              Filtre{relaxedFilters.length > 1 ? "s" : ""} relâché
+              {relaxedFilters.length > 1 ? "s" : ""} :{" "}
+              <span className="font-black text-foreground">{relaxedLabel}</span>{" "}
+              · {total} subvention{total > 1 ? "s" : ""} affichée
+              {total > 1 ? "s" : ""}
+            </p>
+          </div>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="h-3.5 w-3.5" />
+              Reset
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Grant list */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
@@ -305,9 +341,16 @@ export default function GrantsPage() {
           <div className="rounded-2xl border-2 border-dashed border-border p-10 text-center">
             <Search className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
             <p className="text-lg font-black">Aucune subvention trouvée</p>
-            <p className="text-sm text-muted-foreground font-medium mt-1">
-              Essayez de modifier vos filtres ou votre recherche.
+            <p className="text-sm text-muted-foreground font-medium mt-1 max-w-sm">
+              Même en élargissant la recherche, on n&apos;a rien trouvé. Essaie
+              de retirer des filtres ou de changer ta recherche.
             </p>
+            {hasFilters && (
+              <Button variant="accent" className="mt-4" onClick={clearFilters}>
+                <X className="h-4 w-4" />
+                Effacer tous les filtres
+              </Button>
+            )}
           </div>
         </div>
       ) : (

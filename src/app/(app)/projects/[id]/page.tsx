@@ -246,23 +246,51 @@ export default async function ProjectDetailPage({
         )}
       </div>
 
-      {/* Match Scores Section */}
-      {matchList.length > 0 && (
-        <div className="mb-10">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-black">
-              Scores de matching{" "}
-              <span className="text-muted-foreground font-bold">
-                ({matchList.length})
-              </span>
-            </h2>
+      {/* Match Scores Section — always rendered so the user never lands on
+          an empty page. When no scores exist yet we show a prominent CTA
+          that triggers the heuristic matcher; otherwise we show the top 50. */}
+      <div className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-black">
+            Scores de matching{" "}
+            <span className="text-muted-foreground font-bold">
+              ({matchList.length})
+            </span>
+          </h2>
+          {matchList.length > 0 && (
             <div className="flex gap-2">
               <Badge variant="green">
                 {matchList.filter((m) => m.score >= 75).length} top matches
               </Badge>
             </div>
-          </div>
+          )}
+        </div>
 
+        {matchList.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-border bg-[#c8f76f] shadow-[3px_3px_0px_0px_#1a1a1a]">
+                <Sparkles className="h-7 w-7" />
+              </div>
+              <h3 className="mt-4 text-lg font-black text-foreground">
+                Lance ton premier matching
+              </h3>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground font-medium">
+                Notre IA va scorer toutes les subventions actives contre ton
+                projet (≈2 800 subventions). Ça prend moins de 30 secondes.
+              </p>
+              <div className="mt-6">
+                <MatchButton projectId={project.id} />
+              </div>
+              <Link href={`/grants?project_id=${project.id}`} className="mt-4">
+                <Button variant="outline" size="sm">
+                  Ou parcourir le catalogue
+                  <ArrowRight className="h-4 w-4 ml-1" />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ) : (
           <div className="space-y-4">
             {matchList.map((match) => (
               <div
@@ -329,8 +357,8 @@ export default async function ProjectDetailPage({
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Proposals Section */}
       <div className="mb-10">

@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/alerts/new-match",
-      "schedule": "0 10,16 * * *"
+      "schedule": "0 10 * * *"
     },
     {
       "path": "/api/alerts/digest",

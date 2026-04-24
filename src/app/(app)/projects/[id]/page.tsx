@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { ProjectActions } from "@/components/project-actions";
+import { MatchButton } from "@/components/match-button";
 
 function getScoreColor(score: number) {
   if (score >= 75) return "bg-[#c8f76f]";
@@ -71,7 +72,8 @@ export default async function ProjectDetailPage({
       .from("match_scores")
       .select("*, grants(id, title, funder, deadline, max_amount_eur, source_name)")
       .eq("project_id", id)
-      .order("score", { ascending: false }),
+      .order("score", { ascending: false })
+      .limit(50),
   ]);
 
   const proposalList = proposals || [];
@@ -102,10 +104,11 @@ export default async function ProjectDetailPage({
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
+          <MatchButton projectId={project.id} />
           <Link href={`/grants?project_id=${project.id}`}>
             <Button variant="accent">
               <Sparkles className="h-4 w-4" />
-              Trouver des subventions
+              Explorer toutes les subventions
             </Button>
           </Link>
           <ProjectActions projectId={project.id} projectName={project.name} />

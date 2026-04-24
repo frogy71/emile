@@ -19,7 +19,8 @@ import {
   transformToGrant,
 } from "./aides-territoires";
 import { fetchEUOpenCalls, transformEUToGrant } from "./eu-funding";
-import { fetchEuropeAidCalls, transformEuropeAidToGrant } from "./europeaid";
+// EuropeAid is now handled by the EU Funding SEDIA ingestion (split by source_name)
+// import { fetchEuropeAidCalls, transformEuropeAidToGrant } from "./europeaid";
 import { fetchFRUP, transformFRUPToGrant, fetchFondationsEntreprises, transformFEToGrant } from "./data-gouv";
 import { fetchBpiGrants, transformBpiToGrant } from "./bpifrance";
 import { fetchCuratedFoundations, transformCuratedToGrant } from "./fondations-curated";
@@ -149,12 +150,19 @@ export async function runFullIngestion(): Promise<IngestionReport> {
   });
   sources.push(eu);
 
-  // 3. EuropeAid
-  const ea = await ingestSource("EuropeAid / INTPA", async () => {
-    const raw = await fetchEuropeAidCalls();
-    return raw.map(transformEuropeAidToGrant);
+  // 3. EuropeAid / INTPA — now merged into EU Funding ingestion.
+  //    SEDIA returns humanitarian programmes (INTPA/NDICI/HUMA/IPA) alongside
+  //    regular EU programmes; transformEUToGrant splits them by source_name.
+  //    Keep a placeholder entry so the report stays consistent.
+  sources.push({
+    source: "EuropeAid / INTPA",
+    fetched: 0,
+    transformed: 0,
+    inserted: 0,
+    skipped: 0,
+    errors: 0,
+    duration_ms: 0,
   });
-  sources.push(ea);
 
   // 4. data.gouv.fr — FRUP
   const frup = await ingestSource("data.gouv.fr — FRUP", async () => {

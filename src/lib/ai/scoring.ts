@@ -192,7 +192,7 @@ Pour la difficulté: easy = subvention simple/FDVA, medium = AAP régional, hard
 /**
  * Fallback heuristic scoring (no API needed)
  */
-function computeHeuristicScore(
+export function computeHeuristicScore(
   org: OrgProfile,
   grant: GrantProfile,
   project?: ProjectProfile

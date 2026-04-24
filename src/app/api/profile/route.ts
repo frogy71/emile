@@ -84,6 +84,27 @@ export async function POST(request: Request) {
       .insert(row)
       .select()
       .single();
+
+    // Auto-create default alert preferences so new users get deadline emails
+    // without having to visit /settings first. Use a low-noise default (weekly,
+    // score ≥ 60). Fire-and-forget — don't block org creation on this.
+    if (!result.error && result.data?.id) {
+      supabaseAdmin
+        .from("alert_preferences")
+        .upsert(
+          {
+            organization_id: result.data.id,
+            email: user.email || "",
+            frequency: "weekly",
+            min_score: 60,
+            enabled: true,
+          },
+          { onConflict: "organization_id" }
+        )
+        .then(({ error: prefError }) => {
+          if (prefError) console.error("alert_pref seed error:", prefError.message);
+        });
+    }
   }
 
   if (result.error) {

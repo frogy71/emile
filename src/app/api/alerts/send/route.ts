@@ -10,14 +10,43 @@ function getSupabase() {
 }
 
 /**
- * POST /api/alerts/send — Send deadline alerts to users
- * Called by cron job or manually
- * Requires INGESTION_API_KEY header for security
+ * Send deadline alerts. Called by:
+ *  - Vercel Cron (weekly Mon 08:00) — sends `Authorization: Bearer <CRON_SECRET>`
+ *  - Manual triggers from /admin — sends `x-api-key: <INGESTION_API_KEY>`
+ *
+ * Accept both so the cron actually fires in prod while keeping manual control.
  */
-export async function POST(request: Request) {
-  // Verify API key
+function isAuthorized(request: Request): boolean {
+  const bearer = request.headers.get("authorization");
+  if (
+    bearer &&
+    process.env.CRON_SECRET &&
+    bearer === `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return true;
+  }
   const apiKey = request.headers.get("x-api-key");
-  if (apiKey !== process.env.INGESTION_API_KEY) {
+  if (
+    apiKey &&
+    process.env.INGESTION_API_KEY &&
+    apiKey === process.env.INGESTION_API_KEY
+  ) {
+    return true;
+  }
+  return false;
+}
+
+// Vercel Cron defaults to GET — accept both verbs.
+export async function GET(request: Request) {
+  return handle(request);
+}
+
+export async function POST(request: Request) {
+  return handle(request);
+}
+
+async function handle(request: Request) {
+  if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 
@@ -30,10 +59,11 @@ export async function POST(request: Request) {
 
   const supabase = getSupabase();
 
-  // Get all alert preferences
+  // Get all ENABLED alert preferences — users can opt out from /settings.
   const { data: prefs } = await supabase
     .from("alert_preferences")
-    .select("*, organizations(name, user_id)");
+    .select("*, organizations(name, user_id)")
+    .eq("enabled", true);
 
   if (!prefs || prefs.length === 0) {
     return NextResponse.json({ sent: 0, message: "Aucune préférence d'alerte" });

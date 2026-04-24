@@ -111,11 +111,37 @@ export default function OnboardingPage() {
       });
 
       if (!res.ok) throw new Error("Erreur");
-      router.push("/dashboard");
+      // first=1 lets the dashboard show a welcome banner for new users.
+      router.push("/dashboard?first=1");
       router.refresh();
     } catch {
       setSaving(false);
     }
+  };
+
+  // "Passer pour le moment" used to redirect to /dashboard which would trigger
+  // the (app)/layout check (no org → /onboarding) and trap the user. Create a
+  // minimal org stub so they can at least reach the dashboard, and mark the
+  // session as skipped so we can show the configuration reminder there.
+  const handleSkip = async () => {
+    setSaving(true);
+    try {
+      await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name || "Mon organisation",
+          country: "FR",
+          mission: mission || null,
+          thematic_areas: thematicAreas.length ? thematicAreas : null,
+          geographic_focus: geographicFocus.length ? geographicFocus : null,
+        }),
+      });
+    } catch {
+      // Non-fatal — even if profile POST fails, we still try the dashboard.
+    }
+    router.push("/dashboard?first=1&skipped=1");
+    router.refresh();
   };
 
   return (
@@ -347,8 +373,9 @@ export default function OnboardingPage() {
         {/* Skip link */}
         <div className="text-center mt-4">
           <button
-            onClick={() => router.push("/dashboard")}
-            className="text-sm text-muted-foreground font-medium hover:text-foreground transition-colors"
+            onClick={handleSkip}
+            disabled={saving}
+            className="text-sm text-muted-foreground font-medium hover:text-foreground transition-colors disabled:opacity-50"
           >
             Passer pour le moment →
           </button>

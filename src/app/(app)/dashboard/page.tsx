@@ -13,6 +13,8 @@ import {
   Sparkles,
   FolderOpen,
   Search,
+  Wand2,
+  Building2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -24,7 +26,15 @@ const PROJECT_COLORS = [
   "bg-[#d4b5ff]",
 ];
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ first?: string; skipped?: string }>;
+}) {
+  const sp = await searchParams;
+  const isFirstVisit = sp?.first === "1";
+  const didSkipOnboarding = sp?.skipped === "1";
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -102,6 +112,85 @@ export default async function DashboardPage() {
           </Button>
         </Link>
       </div>
+
+      {/* First-visit welcome banner — shown only after onboarding redirects
+          back here with ?first=1. Guides the next step explicitly instead of
+          leaving the user staring at empty stats. */}
+      {isFirstVisit && (
+        <div className="mt-6 rounded-2xl border-2 border-border bg-[#c8f76f] p-6 shadow-[4px_4px_0px_0px_#1a1a1a]">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-[#1a1a1a] text-[#c8f76f] shadow-[3px_3px_0px_0px_#1a1a1a]">
+              <Sparkles className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-xl font-black">
+                Bienvenue ! Voici comment Emile fonctionne.
+              </h2>
+              <p className="text-sm font-medium mt-1">
+                {didSkipOnboarding
+                  ? "Tu pourras compléter ton profil plus tard — en attendant, voici les étapes pour trouver tes premières subventions."
+                  : "Ton organisation est configurée. Maintenant, crée ton premier projet pour que notre IA puisse matcher les subventions pertinentes."}
+              </p>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border-2 border-border bg-background p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-md border-2 border-border bg-[#ffe066] text-xs font-black">
+                      1
+                    </span>
+                    <p className="text-sm font-black">Crée un projet</p>
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Décris ton projet en un paragraphe, notre IA structure le
+                    reste en 10 secondes.
+                  </p>
+                </div>
+                <div className="rounded-xl border-2 border-border bg-background p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-md border-2 border-border bg-[#ffa3d1] text-xs font-black">
+                      2
+                    </span>
+                    <p className="text-sm font-black">Lance le matching</p>
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    On score les ~2 800 subventions actives contre ton projet
+                    en moins de 30 secondes.
+                  </p>
+                </div>
+                <div className="rounded-xl border-2 border-border bg-background p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-md border-2 border-border bg-[#d4b5ff] text-xs font-black">
+                      3
+                    </span>
+                    <p className="text-sm font-black">
+                      Génère un brouillon
+                    </p>
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Choisis une bonne match, clique, télécharge le .docx —
+                    tout est pré-rédigé.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Link href="/projects/new">
+                  <Button variant="default">
+                    <Wand2 className="h-4 w-4" />
+                    Créer mon premier projet
+                  </Button>
+                </Link>
+                {didSkipOnboarding && (
+                  <Link href="/profile">
+                    <Button variant="outline">
+                      <Building2 className="h-4 w-4" />
+                      Compléter mon profil asso
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="mt-8 grid gap-4 md:grid-cols-4">

@@ -1,28 +1,56 @@
 /**
- * GrantScore — AI-powered grant matching
+ * GrantScore — grant ↔ project matching
  *
- * Uses Claude API to compute a compatibility score between
- * an organization/project profile and a grant opportunity.
+ * Two paths:
+ *  - computeHeuristicScore  : deterministic, fast, runs on ~3 000 grants
+ *  - computeMatchScore      : Claude-powered, richer, runs on demand
  *
- * Returns a structured score with explanation.
+ * Both produce the same MatchScoreResult so the UI doesn't care which path
+ * produced a given score.
+ *
+ * ## Heuristic design
+ *
+ * Score is additive out of 100, with hard gates that zero-out ineligible
+ * grants rather than letting them score 40+ like the old heuristic did:
+ *
+ *   HARD GATES (score = 0, recommendation = "skip"):
+ *     - deadline passed
+ *     - eligible_entities specified and org/project doesn't match
+ *     - eligible_countries specified and no geographic overlap
+ *     - grant min_amount exceeds project requested_amount
+ *
+ *   COMPONENTS (max 100):
+ *     - Thematic alignment       : 0-40   (structured themes + free-text)
+ *     - Geographic fit           : 0-20
+ *     - Entity eligibility       : 0-15
+ *     - Budget fit               : 0-15
+ *     - Deadline runway          :  0-5
+ *     - Experience & capacity    :  0-5
+ *
+ * Why additive with hard gates? It gives a real 0-100 spread (good matches
+ * actually hit 80+, bad matches actually drop below 30) and eliminates the
+ * "every grant scores 40-70" bug the old heuristic had.
  */
 
 import { logAiUsage } from "./usage-tracker";
 
 export interface MatchScoreResult {
   score: number; // 0-100
-  difficulty: "easy" | "medium" | "hard" | "very_hard"; // How hard it is to get the grant
-  difficultyLabel: string; // Human-readable difficulty
+  difficulty: "easy" | "medium" | "hard" | "very_hard";
+  difficultyLabel: string;
   recommendation: "pursue" | "maybe" | "skip";
   strengths: string[];
   weaknesses: string[];
   risks: string[];
   summary: string;
+  /** Which hard gate zeroed the score (debugging + UI context). */
+  gatedBy?: string;
 }
 
 export interface OrgProfile {
   name: string;
   mission?: string;
+  legalStatus?: string;
   thematicAreas?: string[];
   beneficiaries?: string[];
   geographicFocus?: string[];
@@ -58,9 +86,486 @@ export interface GrantProfile {
   grantType?: string;
 }
 
+// ─── Normalization helpers ───────────────────────────────────────
+
+/** Lowercase + strip diacritics + collapse whitespace. */
+function normalize(s: string | undefined | null): string {
+  if (!s) return "";
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
- * Compute match score using Claude API
+ * French NGO theme → keyword stems. Used to expand structured themes into
+ * a larger keyword set that also matches free-text (titles, summaries, missions).
+ *
+ * Keep stems short enough to catch morphological variants via substring.
+ * e.g. "educ" catches "éducation", "éducative", "éducateurs".
  */
+const THEME_KEYWORDS: Record<string, string[]> = {
+  humanitaire: ["humanitaire", "urgence", "crise", "secours", "catastrophe", "sinistre"],
+  education: ["educ", "scolair", "ecole", "enseignement", "apprentissage", "formation", "pedagog", "alphabet"],
+  jeunesse: ["jeunesse", "jeune", "adolescent", "enfance", "enfant", "mineur"],
+  inclusion: ["inclusion", "handicap", "accessibilit", "integration", "insertion"],
+  culture: ["cultur", "art", "patrimoine", "musee", "theatre", "spectacle", "musiqu", "litterat"],
+  sante: ["sante", "soin", "medical", "hopital", "maladie", "prevention", "bien etre"],
+  environnement: ["environnement", "ecolog", "climat", "biodiversit", "transition", "nature", "dechet", "pollution", "energie"],
+  "droits humains": ["droits", "justice", "democrat", "liberte", "citoyennet"],
+  migration: ["migration", "migrant", "refugi", "asile", "exil", "deplac"],
+  developpement: ["developpement", "cooperation", "solidarit", "aide"],
+  egalite: ["egalit", "parite", "femme", "genre", "feminis", "discrimin"],
+  numerique: ["numerique", "digital", "tech", "informatique", "internet"],
+  agriculture: ["agricult", "rural", "paysan", "alimentation", "alimentaire"],
+  sport: ["sport", "activite physique"],
+  social: ["social", "precarit", "pauvrete", "exclusion", "sans abri", "logement"],
+  economie: ["economie", "emploi", "insertion", "entrepreneur", "ess"],
+};
+
+/** Expand structured theme names + free-text into a keyword set. */
+function extractKeywords(
+  structuredThemes: string[] | undefined,
+  freeText: string[]
+): Set<string> {
+  const keywords = new Set<string>();
+
+  for (const theme of structuredThemes || []) {
+    const key = normalize(theme);
+    // Direct theme keyword
+    keywords.add(key);
+    // Expand via dictionary — look up by normalized key AND by each entry's normalized form
+    for (const [dictKey, stems] of Object.entries(THEME_KEYWORDS)) {
+      if (key.includes(normalize(dictKey)) || normalize(dictKey).includes(key)) {
+        for (const stem of stems) keywords.add(stem);
+      }
+    }
+  }
+
+  const allText = freeText.map(normalize).join(" ");
+  // For free-text, check which dictionary stems appear — that's our free-text signal
+  for (const [dictKey, stems] of Object.entries(THEME_KEYWORDS)) {
+    for (const stem of stems) {
+      if (allText.includes(stem)) {
+        keywords.add(stem);
+        keywords.add(normalize(dictKey));
+      }
+    }
+  }
+
+  return keywords;
+}
+
+/**
+ * Geography hierarchy. Each token maps to a set of parent/equivalent regions.
+ * When we check overlap we expand both sides and look for any intersection.
+ */
+const GEO_PARENTS: Record<string, string[]> = {
+  world: ["world", "international"],
+  international: ["world", "international"],
+  europe: ["europe", "eu", "ue"],
+  eu: ["europe", "eu", "ue"],
+  ue: ["europe", "eu", "ue"],
+  france: ["france", "fr", "europe", "eu"],
+  fr: ["france", "fr", "europe", "eu"],
+  afrique: ["afrique", "africa"],
+  africa: ["afrique", "africa"],
+  asie: ["asie", "asia"],
+  asia: ["asie", "asia"],
+  "amerique latine": ["amerique latine", "latin america"],
+  "latin america": ["amerique latine", "latin america"],
+  local: ["local", "territorial", "france", "fr"],
+  territorial: ["local", "territorial", "france", "fr"],
+  national: ["national", "france", "fr"],
+};
+
+function expandGeo(tokens: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const raw of tokens) {
+    const t = normalize(raw);
+    out.add(t);
+    // Look up any known parent
+    for (const [key, parents] of Object.entries(GEO_PARENTS)) {
+      if (t.includes(key) || key.includes(t)) {
+        for (const p of parents) out.add(p);
+      }
+    }
+  }
+  return out;
+}
+
+function geoOverlap(orgGeo: string[] | undefined, grantGeo: string[] | undefined): {
+  strength: "exact" | "partial" | "unknown" | "none";
+} {
+  if (!grantGeo || grantGeo.length === 0) return { strength: "unknown" };
+  const orgSet = expandGeo(orgGeo || []);
+  const grantSet = expandGeo(grantGeo);
+
+  // "world"/"international" on the grant side = accessible to anyone
+  if (grantSet.has("world") || grantSet.has("international")) {
+    return { strength: "exact" };
+  }
+
+  if (orgSet.size === 0) return { strength: "unknown" };
+
+  // Direct intersection?
+  for (const g of grantSet) {
+    if (orgSet.has(g)) return { strength: "exact" };
+  }
+
+  // Weaker overlap through parents (Europe ⊇ France)
+  for (const g of grantSet) {
+    for (const o of orgSet) {
+      if (g.includes(o) || o.includes(g)) return { strength: "partial" };
+    }
+  }
+
+  return { strength: "none" };
+}
+
+// ─── Entity eligibility ──────────────────────────────────────────
+
+function checkEntityFit(
+  orgLegalStatus: string | undefined,
+  eligibleEntities: string[] | undefined
+): { strength: "match" | "generic" | "unknown" | "mismatch"; label?: string } {
+  if (!eligibleEntities || eligibleEntities.length === 0) {
+    return { strength: "unknown" };
+  }
+
+  const eligible = eligibleEntities.map(normalize);
+  const allText = eligible.join(" ");
+
+  // "Tous publics" / "tout type" → generic accessibility
+  if (/tous|tout type|ouvert|any/i.test(allText)) {
+    return { strength: "generic" };
+  }
+
+  // Which entity types appear in eligible list?
+  const accepts = {
+    association: /associat|ong|nonprofit|non lucratif|a but non lucratif/.test(allText),
+    fondation: /fondation|foundation/.test(allText),
+    collectivite: /collectivit|commune|region|departement|epci|intercommunal/.test(allText),
+    entreprise: /entreprise|societe|ess|economie sociale/.test(allText),
+  };
+
+  const status = normalize(orgLegalStatus || "association"); // default to association (most common)
+  if (status.includes("associat") || status.includes("ong")) {
+    return accepts.association
+      ? { strength: "match", label: "Associations éligibles" }
+      : { strength: "mismatch", label: "Associations non éligibles" };
+  }
+  if (status.includes("fondation")) {
+    return accepts.fondation
+      ? { strength: "match", label: "Fondations éligibles" }
+      : { strength: "mismatch" };
+  }
+  if (status.includes("collectivite")) {
+    return accepts.collectivite
+      ? { strength: "match" }
+      : { strength: "mismatch" };
+  }
+  if (status.includes("entreprise") || status.includes("ess")) {
+    return accepts.entreprise ? { strength: "match" } : { strength: "mismatch" };
+  }
+
+  // Unknown status — if any NGO-ish type is eligible, give benefit of doubt
+  return accepts.association || accepts.fondation
+    ? { strength: "generic" }
+    : { strength: "unknown" };
+}
+
+// ─── Budget fit ──────────────────────────────────────────────────
+
+function checkBudgetFit(
+  requested: number | undefined,
+  min: number | undefined,
+  max: number | undefined
+): {
+  strength: "fit" | "grant_too_big" | "grant_too_small" | "unknown";
+  label?: string;
+} {
+  if (!requested || (!min && !max)) return { strength: "unknown" };
+
+  if (max && requested > max) {
+    return {
+      strength: "grant_too_small",
+      label: `Plafond ${max.toLocaleString("fr-FR")} € < besoin`,
+    };
+  }
+
+  if (min && requested < min * 0.7) {
+    // Project budget way below grant's minimum → probably not the right fit
+    return {
+      strength: "grant_too_big",
+      label: `Minimum ${min.toLocaleString("fr-FR")} € > besoin`,
+    };
+  }
+
+  return { strength: "fit" };
+}
+
+// ─── Deadline runway ─────────────────────────────────────────────
+
+function daysUntilDeadline(deadline: string | undefined): number | null {
+  if (!deadline) return null;
+  const d = new Date(deadline).getTime();
+  if (!isFinite(d)) return null;
+  return Math.ceil((d - Date.now()) / (1000 * 60 * 60 * 24));
+}
+
+// ─── Main heuristic ──────────────────────────────────────────────
+
+export function computeHeuristicScore(
+  org: OrgProfile,
+  grant: GrantProfile,
+  project?: ProjectProfile
+): MatchScoreResult {
+  const strengths: string[] = [];
+  const weaknesses: string[] = [];
+  const risks: string[] = [];
+
+  // ─── HARD GATES ──────────────────────────────────────────────────
+  const days = daysUntilDeadline(grant.deadline);
+  if (days !== null && days < 0) {
+    return gated(
+      "deadline_passed",
+      "Deadline passée",
+      computeDifficulty(grant)
+    );
+  }
+
+  // Entity gate
+  const entityFit = checkEntityFit(org.legalStatus, grant.eligibleEntities);
+  if (entityFit.strength === "mismatch") {
+    return gated(
+      "entity_mismatch",
+      entityFit.label || "Profil juridique non éligible",
+      computeDifficulty(grant)
+    );
+  }
+
+  // Geographic gate
+  const combinedGeo = [
+    ...(org.geographicFocus || []),
+    ...(project?.targetGeography || []),
+  ];
+  const geoFit = geoOverlap(combinedGeo, grant.eligibleCountries);
+  if (geoFit.strength === "none") {
+    return gated(
+      "geo_mismatch",
+      "Zones géographiques non couvertes",
+      computeDifficulty(grant)
+    );
+  }
+
+  // Budget gate (only when grant is clearly too big)
+  const budgetFit = checkBudgetFit(
+    project?.requestedAmountEur,
+    grant.minAmountEur,
+    grant.maxAmountEur
+  );
+  if (budgetFit.strength === "grant_too_big" && grant.minAmountEur) {
+    // Don't zero — just apply as weakness. A project could scale up.
+    weaknesses.push(budgetFit.label || "Plafond bas");
+  }
+
+  // ─── THEMATIC ALIGNMENT (0-40) ──────────────────────────────────
+  const orgFreeText = [org.mission, ...(project ? [project.summary, ...(project.objectives || [])] : [])]
+    .filter(Boolean) as string[];
+  const grantFreeText = [grant.title, grant.summary, grant.funder].filter(Boolean) as string[];
+
+  const orgKeywords = extractKeywords(org.thematicAreas, orgFreeText);
+  const grantKeywords = extractKeywords(grant.thematicAreas, grantFreeText);
+
+  let thematicHits = 0;
+  for (const k of orgKeywords) {
+    if (grantKeywords.has(k)) thematicHits++;
+  }
+
+  // 4 points per hit, capped at 40; requires at least 1 hit for any points.
+  const thematicScore = Math.min(40, thematicHits * 4);
+
+  if (thematicHits >= 5) {
+    strengths.push("Thématiques très alignées");
+  } else if (thematicHits >= 2) {
+    strengths.push("Thématiques alignées");
+  } else if (thematicHits === 1) {
+    strengths.push("Une thématique commune");
+  } else if (grant.thematicAreas?.length) {
+    weaknesses.push("Thématiques peu alignées");
+  }
+
+  // ─── GEOGRAPHIC FIT (0-20) ───────────────────────────────────────
+  let geoScore = 0;
+  if (geoFit.strength === "exact") {
+    geoScore = 20;
+    strengths.push("Zone géographique parfaitement couverte");
+  } else if (geoFit.strength === "partial") {
+    geoScore = 12;
+    strengths.push("Zone géographique partiellement couverte");
+  } else if (geoFit.strength === "unknown") {
+    geoScore = 12; // benefit of doubt when grant doesn't specify
+  }
+
+  // ─── ENTITY ELIGIBILITY (0-15) ───────────────────────────────────
+  let entityScore = 0;
+  if (entityFit.strength === "match") {
+    entityScore = 15;
+    if (entityFit.label) strengths.push(entityFit.label);
+  } else if (entityFit.strength === "generic") {
+    entityScore = 12;
+  } else if (entityFit.strength === "unknown") {
+    entityScore = 10; // benefit of doubt
+  }
+
+  // ─── BUDGET FIT (0-15) ───────────────────────────────────────────
+  let budgetScore = 0;
+  if (budgetFit.strength === "fit") {
+    budgetScore = 15;
+    if (project?.requestedAmountEur && grant.maxAmountEur) {
+      strengths.push(
+        `Budget adapté (plafond ${Math.round(grant.maxAmountEur / 1000)}k€)`
+      );
+    }
+  } else if (budgetFit.strength === "grant_too_big") {
+    budgetScore = 6;
+  } else if (budgetFit.strength === "grant_too_small") {
+    budgetScore = 3;
+    if (budgetFit.label) weaknesses.push(budgetFit.label);
+  } else {
+    budgetScore = 8; // unknown → moderate
+  }
+
+  // ─── DEADLINE RUNWAY (0-5) ───────────────────────────────────────
+  let deadlineScore = 0;
+  if (days === null) {
+    deadlineScore = 3; // rolling / unknown
+  } else if (days >= 60) {
+    deadlineScore = 5;
+  } else if (days >= 30) {
+    deadlineScore = 4;
+  } else if (days >= 14) {
+    deadlineScore = 2;
+    risks.push(`Deadline dans ${days}j`);
+  } else {
+    deadlineScore = 0;
+    risks.push(`Deadline urgente (${days}j)`);
+  }
+
+  // ─── EXPERIENCE & CAPACITY (0-5) ─────────────────────────────────
+  let experienceScore = 0;
+  const prior = normalize(org.priorGrants);
+  const funderNorm = normalize(grant.funder);
+  if (prior && funderNorm && prior.includes(funderNorm)) {
+    experienceScore = 5;
+    strengths.push(`Historique avec ${grant.funder}`);
+  } else if (org.priorGrants && grant.grantType) {
+    if (
+      prior.includes(normalize(grant.grantType)) ||
+      prior.includes("appel") ||
+      prior.includes("fondation")
+    ) {
+      experienceScore = 2;
+    }
+  }
+
+  // Co-financing penalty — small orgs without strong budget
+  if (
+    grant.coFinancingRequired &&
+    (!org.annualBudgetEur || org.annualBudgetEur < 50_000)
+  ) {
+    risks.push("Cofinancement requis");
+  }
+
+  // ─── TOTAL ───────────────────────────────────────────────────────
+  let total =
+    thematicScore + geoScore + entityScore + budgetScore + deadlineScore + experienceScore;
+  total = Math.max(0, Math.min(100, total));
+
+  const difficulty = computeDifficulty(grant);
+  const recommendation: "pursue" | "maybe" | "skip" =
+    total >= 70 ? "pursue" : total >= 45 ? "maybe" : "skip";
+
+  return {
+    score: total,
+    difficulty: difficulty.level,
+    difficultyLabel: difficulty.label,
+    recommendation,
+    strengths,
+    weaknesses,
+    risks,
+    summary: buildSummary(total, thematicHits, geoFit.strength, entityFit.strength),
+  };
+}
+
+function gated(
+  reason: string,
+  label: string,
+  difficulty: { level: "easy" | "medium" | "hard" | "very_hard"; label: string }
+): MatchScoreResult {
+  return {
+    score: 0,
+    difficulty: difficulty.level,
+    difficultyLabel: difficulty.label,
+    recommendation: "skip",
+    strengths: [],
+    weaknesses: [label],
+    risks: [],
+    summary: label,
+    gatedBy: reason,
+  };
+}
+
+function buildSummary(
+  score: number,
+  themeHits: number,
+  geoStrength: string,
+  entityStrength: string
+): string {
+  if (score >= 80) {
+    return `Excellent match : critères clés alignés (${themeHits} thématiques, géographie et profil éligibles).`;
+  }
+  if (score >= 65) {
+    return `Bon match : alignement thématique correct, à pousser si deadline compatible.`;
+  }
+  if (score >= 45) {
+    return `Match partiel : quelques critères alignent, vérifier les détails d'éligibilité.`;
+  }
+  if (geoStrength === "none" || entityStrength === "mismatch") {
+    return `Peu pertinent : critères d'éligibilité non remplis.`;
+  }
+  return `Peu pertinent : alignement thématique faible.`;
+}
+
+// ─── Difficulty ──────────────────────────────────────────────────
+
+function computeDifficulty(grant: GrantProfile): {
+  level: "easy" | "medium" | "hard" | "very_hard";
+  label: string;
+} {
+  let d = 0;
+
+  if (grant.country === "EU") d += 3;
+  if (grant.coFinancingRequired) d += 1;
+  if (grant.maxAmountEur) {
+    if (grant.maxAmountEur > 500_000) d += 2;
+    else if (grant.maxAmountEur > 100_000) d += 1;
+  }
+  if (grant.grantType === "appel_a_projets") d += 1;
+  if (grant.grantType === "fondation") d -= 1;
+
+  if (d <= 1) return { level: "easy", label: "Accessible" };
+  if (d <= 3) return { level: "medium", label: "Modéré" };
+  if (d <= 5) return { level: "hard", label: "Compétitif" };
+  return { level: "very_hard", label: "Très compétitif" };
+}
+
+// ─── Claude-powered scoring (on-demand, single grant) ────────────
+
 export async function computeMatchScore(
   org: OrgProfile,
   grant: GrantProfile,
@@ -68,12 +573,17 @@ export async function computeMatchScore(
 ): Promise<MatchScoreResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  if (!apiKey) {
-    // Fallback: simple heuristic scoring when no API key
-    return computeHeuristicScore(org, grant, project);
-  }
+  // Always compute heuristic first — this seeds the AI with a baseline and
+  // acts as our fallback if the API fails. Also lets the AI refine rather
+  // than start from zero.
+  const heuristic = computeHeuristicScore(org, grant, project);
 
-  const prompt = buildScoringPrompt(org, grant, project);
+  if (!apiKey) return heuristic;
+
+  // Don't spend AI tokens on gated grants — the hard gate answer is correct.
+  if (heuristic.gatedBy) return heuristic;
+
+  const prompt = buildScoringPrompt(org, grant, project, heuristic);
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -92,13 +602,12 @@ export async function computeMatchScore(
 
     if (!response.ok) {
       console.error("Claude API error:", response.status);
-      return computeHeuristicScore(org, grant, project);
+      return heuristic;
     }
 
     const data = await response.json();
     const text = data.content?.[0]?.text || "";
 
-    // Track AI usage
     const usage = data.usage;
     if (usage) {
       logAiUsage({
@@ -109,245 +618,88 @@ export async function computeMatchScore(
       });
     }
 
-    // Parse JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const result = JSON.parse(jsonMatch[0]);
-      return {
-        score: Math.max(0, Math.min(100, result.score || 50)),
-        difficulty: result.difficulty || "medium",
-        difficultyLabel: result.difficultyLabel || "Modéré",
-        recommendation: result.recommendation || "maybe",
-        strengths: result.strengths || [],
-        weaknesses: result.weaknesses || [],
-        risks: result.risks || [],
-        summary: result.summary || "",
-      };
-    }
+    if (!jsonMatch) return heuristic;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      score: Math.max(0, Math.min(100, parsed.score ?? heuristic.score)),
+      difficulty: parsed.difficulty || heuristic.difficulty,
+      difficultyLabel: parsed.difficultyLabel || heuristic.difficultyLabel,
+      recommendation: parsed.recommendation || heuristic.recommendation,
+      strengths: parsed.strengths || heuristic.strengths,
+      weaknesses: parsed.weaknesses || heuristic.weaknesses,
+      risks: parsed.risks || heuristic.risks,
+      summary: parsed.summary || heuristic.summary,
+    };
   } catch (error) {
     console.error("Scoring error:", error);
+    return heuristic;
   }
-
-  return computeHeuristicScore(org, grant, project);
 }
 
-/**
- * Build the scoring prompt for Claude
- */
 function buildScoringPrompt(
   org: OrgProfile,
   grant: GrantProfile,
-  project?: ProjectProfile
+  project: ProjectProfile | undefined,
+  heuristic: MatchScoreResult
 ): string {
-  return `Tu es un expert en matching de subventions pour les ONG européennes.
+  return `Tu es un expert en financement pour les ONG francophones. Tu évalues si une subvention est pertinente pour une organisation.
 
-PROFIL DE L'ORGANISATION:
+ORGANISATION:
 - Nom: ${org.name}
+- Statut: ${org.legalStatus || "Non spécifié"}
 - Mission: ${org.mission || "Non spécifiée"}
-- Thématiques: ${org.thematicAreas?.join(", ") || "Non spécifiées"}
-- Bénéficiaires: ${org.beneficiaries?.join(", ") || "Non spécifiés"}
-- Zones géographiques: ${org.geographicFocus?.join(", ") || "Non spécifiées"}
-- Budget annuel: ${org.annualBudgetEur ? org.annualBudgetEur + "€" : "Non spécifié"}
-- Taille équipe: ${org.teamSize || "Non spécifiée"}
-- Langues: ${org.languages?.join(", ") || "Non spécifiées"}
-- Expérience grants: ${org.priorGrants || "Non spécifiée"}
+- Thématiques: ${org.thematicAreas?.join(", ") || "—"}
+- Bénéficiaires: ${org.beneficiaries?.join(", ") || "—"}
+- Zones: ${org.geographicFocus?.join(", ") || "—"}
+- Budget annuel: ${org.annualBudgetEur ? org.annualBudgetEur + " €" : "—"}
+- Taille équipe: ${org.teamSize || "—"}
+- Historique subventions: ${org.priorGrants || "—"}
 
 ${project ? `PROJET:
 - Nom: ${project.name}
-- Résumé: ${project.summary || "Non spécifié"}
-- Objectifs: ${project.objectives?.join("; ") || "Non spécifiés"}
-- Bénéficiaires cibles: ${project.targetBeneficiaries?.join(", ") || "Non spécifiés"}
-- Géographie cible: ${project.targetGeography?.join(", ") || "Non spécifiée"}
-- Montant demandé: ${project.requestedAmountEur ? project.requestedAmountEur + "€" : "Non spécifié"}
-- Durée: ${project.durationMonths ? project.durationMonths + " mois" : "Non spécifiée"}` : ""}
+- Résumé: ${project.summary || "—"}
+- Objectifs: ${project.objectives?.join("; ") || "—"}
+- Bénéficiaires: ${project.targetBeneficiaries?.join(", ") || "—"}
+- Géographie: ${project.targetGeography?.join(", ") || "—"}
+- Budget demandé: ${project.requestedAmountEur ? project.requestedAmountEur + " €" : "—"}
+- Durée: ${project.durationMonths ? project.durationMonths + " mois" : "—"}` : "PROJET: Pas de projet ciblé — scoring sur la base du profil organisation."}
 
 SUBVENTION:
 - Titre: ${grant.title}
-- Résumé: ${grant.summary || "Non spécifié"}
-- Bailleur: ${grant.funder || "Non spécifié"}
-- Pays: ${grant.country || "Non spécifié"}
-- Thématiques: ${grant.thematicAreas?.join(", ") || "Non spécifiées"}
-- Entités éligibles: ${grant.eligibleEntities?.join(", ") || "Non spécifiées"}
-- Montant max: ${grant.maxAmountEur ? grant.maxAmountEur + "€" : "Non spécifié"}
-- Cofinancement requis: ${grant.coFinancingRequired ? "Oui" : "Non / Non spécifié"}
-- Deadline: ${grant.deadline || "Non spécifiée"}
+- Résumé: ${grant.summary?.slice(0, 800) || "—"}
+- Bailleur: ${grant.funder || "—"}
+- Thématiques: ${grant.thematicAreas?.join(", ") || "—"}
+- Pays éligibles: ${grant.eligibleCountries?.join(", ") || "—"}
+- Entités éligibles: ${grant.eligibleEntities?.join(", ") || "—"}
+- Plafond: ${grant.maxAmountEur ? grant.maxAmountEur + " €" : "—"}
+- Cofinancement: ${grant.coFinancingRequired ? "requis" : "non requis / non précisé"}
+- Deadline: ${grant.deadline || "—"}
+- Type: ${grant.grantType || "—"}
 
-Score cette correspondance de 0 à 100. Évalue aussi la difficulté d'obtention.
-Retourne UNIQUEMENT un JSON valide:
+SCORE HEURISTIQUE DE RÉFÉRENCE: ${heuristic.score}/100 (${heuristic.recommendation})
+Points forts détectés: ${heuristic.strengths.join("; ") || "—"}
+Points faibles détectés: ${heuristic.weaknesses.join("; ") || "—"}
+
+Ajuste ce score à la hausse ou à la baisse en fonction de ton analyse plus fine. N'augmente PAS le score artificiellement — sois honnête. Tiens compte de la compétition réelle et des critères d'éligibilité implicites dans le résumé.
+
+Retourne UNIQUEMENT un JSON valide (pas de markdown):
 {
-  "score": number,
+  "score": number (0-100),
   "difficulty": "easy" | "medium" | "hard" | "very_hard",
   "difficultyLabel": "Accessible" | "Modéré" | "Compétitif" | "Très compétitif",
   "recommendation": "pursue" | "maybe" | "skip",
-  "strengths": ["raison 1", "raison 2"],
-  "weaknesses": ["point faible 1"],
+  "strengths": ["raison concrète et spécifique 1", "raison 2"],
+  "weaknesses": ["point faible concret 1"],
   "risks": ["risque 1"],
-  "summary": "Résumé en 1-2 phrases"
+  "summary": "Résumé en 1-2 phrases, sans blabla"
 }
 
-Sois honnête. Un score de 70+ = bon match. Ne gonfle pas les scores.
-Pour la difficulté: easy = subvention simple/FDVA, medium = AAP régional, hard = EU/gros montants, very_hard = Horizon Europe/gros consortium.`;
-}
-
-/**
- * Fallback heuristic scoring (no API needed)
- */
-export function computeHeuristicScore(
-  org: OrgProfile,
-  grant: GrantProfile,
-  project?: ProjectProfile
-): MatchScoreResult {
-  let score = 40; // Base score
-  const strengths: string[] = [];
-  const weaknesses: string[] = [];
-  const risks: string[] = [];
-
-  // Thematic match
-  const orgThemes = new Set(
-    (org.thematicAreas || []).map((t) => t.toLowerCase())
-  );
-  const grantThemes = (grant.thematicAreas || []).map((t) => t.toLowerCase());
-  const themeOverlap = grantThemes.filter((t) =>
-    [...orgThemes].some(
-      (ot) => t.includes(ot) || ot.includes(t)
-    )
-  );
-  if (themeOverlap.length > 0) {
-    score += 15 + Math.min(themeOverlap.length * 5, 15);
-    strengths.push("Thématique alignée");
-  } else if (grantThemes.length > 0) {
-    weaknesses.push("Thématique partielle");
-  }
-
-  // Geographic match
-  const orgGeo = new Set(
-    (org.geographicFocus || []).map((g) => g.toLowerCase())
-  );
-  const grantCountries = (grant.eligibleCountries || []).map((c) =>
-    c.toLowerCase()
-  );
-  if (
-    grantCountries.some(
-      (c) => c === "fr" || [...orgGeo].some((g) => g.includes("france"))
-    )
-  ) {
-    score += 10;
-    strengths.push("Éligibilité géographique");
-  }
-
-  // Entity type match
-  const eligibleTypes = (grant.eligibleEntities || []).map((e) =>
-    e.toLowerCase()
-  );
-  if (
-    eligibleTypes.some(
-      (e) =>
-        e.includes("association") ||
-        e.includes("ong") ||
-        e.includes("nonprofit")
-    )
-  ) {
-    score += 10;
-    strengths.push("Profil éligible");
-  }
-
-  // Budget match
-  if (project?.requestedAmountEur && grant.maxAmountEur) {
-    if (project.requestedAmountEur <= grant.maxAmountEur) {
-      score += 5;
-      strengths.push("Budget compatible");
-    } else {
-      score -= 5;
-      weaknesses.push("Budget trop élevé");
-    }
-  }
-
-  // Co-financing risk
-  if (grant.coFinancingRequired) {
-    risks.push("Cofinancement requis");
-  }
-
-  // Deadline check
-  if (grant.deadline) {
-    const daysLeft = Math.ceil(
-      (new Date(grant.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    );
-    if (daysLeft < 30) {
-      risks.push("Deadline proche");
-    }
-    if (daysLeft > 180) {
-      strengths.push("Deadline éloignée");
-    }
-  }
-
-  score = Math.max(10, Math.min(95, score));
-
-  const recommendation =
-    score >= 70 ? "pursue" : score >= 50 ? "maybe" : "skip";
-
-  // Compute difficulty based on grant characteristics
-  const difficulty = computeDifficulty(grant);
-
-  return {
-    score,
-    difficulty: difficulty.level,
-    difficultyLabel: difficulty.label,
-    recommendation,
-    strengths,
-    weaknesses,
-    risks,
-    summary:
-      score >= 70
-        ? "Bonne correspondance — cette subvention mérite d'être poursuivie."
-        : score >= 50
-          ? "Correspondance partielle — à évaluer selon vos priorités."
-          : "Correspondance faible — autres opportunités probablement plus pertinentes.",
-  };
-}
-
-/**
- * Compute grant difficulty level
- * Based on: grant type, funding source, amount, co-financing, competition level
- */
-function computeDifficulty(grant: GrantProfile): {
-  level: "easy" | "medium" | "hard" | "very_hard";
-  label: string;
-} {
-  let difficultyScore = 0; // 0 = easy, higher = harder
-
-  // EU grants are harder (competition, consortium, co-financing)
-  if (grant.country === "EU") {
-    difficultyScore += 3;
-  }
-
-  // Co-financing required = harder
-  if (grant.coFinancingRequired) {
-    difficultyScore += 1;
-  }
-
-  // Large amounts = more competition = harder
-  if (grant.maxAmountEur) {
-    if (grant.maxAmountEur > 500000) difficultyScore += 2;
-    else if (grant.maxAmountEur > 100000) difficultyScore += 1;
-  }
-
-  // Appels à projets are more competitive than subventions
-  if (grant.grantType === "appel_a_projets") {
-    difficultyScore += 1;
-  }
-
-  // Fondation = generally more accessible
-  if (grant.grantType === "fondation") {
-    difficultyScore -= 1;
-  }
-
-  if (difficultyScore <= 1) {
-    return { level: "easy", label: "Accessible" };
-  } else if (difficultyScore <= 3) {
-    return { level: "medium", label: "Modéré" };
-  } else if (difficultyScore <= 5) {
-    return { level: "hard", label: "Compétitif" };
-  } else {
-    return { level: "very_hard", label: "Très compétitif" };
-  }
+Règles:
+- 80+ = match excellent, à poursuivre absolument
+- 60-79 = bon match, recommandation "pursue"
+- 45-59 = match partiel, recommandation "maybe"
+- <45 = peu pertinent, recommandation "skip"
+- Cite des éléments précis du résumé de la subvention dans les strengths/weaknesses.`;
 }

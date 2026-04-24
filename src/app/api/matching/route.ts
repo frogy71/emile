@@ -59,6 +59,7 @@ export async function POST(request: Request) {
   const scoreResult = await computeMatchScore(
     {
       name: org.name,
+      legalStatus: org.legal_status,
       mission: org.mission,
       thematicAreas: org.thematic_areas,
       beneficiaries: org.beneficiaries,

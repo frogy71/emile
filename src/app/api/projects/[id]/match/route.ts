@@ -33,7 +33,7 @@ export async function POST(
   // Ownership check
   const { data: project, error: projectError } = await supabaseAdmin
     .from("projects")
-    .select("*, organizations!inner(id, user_id, name, mission, thematic_areas, beneficiaries, geographic_focus, annual_budget_eur, team_size, languages, prior_grants)")
+    .select("*, organizations!inner(id, user_id, name, legal_status, mission, thematic_areas, beneficiaries, geographic_focus, annual_budget_eur, team_size, languages, prior_grants)")
     .eq("id", projectId)
     .single();
 
@@ -45,6 +45,7 @@ export async function POST(
     id: string;
     user_id: string;
     name: string;
+    legal_status?: string;
     mission?: string;
     thematic_areas?: string[];
     beneficiaries?: string[];
@@ -77,6 +78,7 @@ export async function POST(
 
   const orgProfile = {
     name: org.name,
+    legalStatus: org.legal_status,
     mission: org.mission,
     thematicAreas: org.thematic_areas,
     beneficiaries: org.beneficiaries,
@@ -149,6 +151,7 @@ export async function POST(
   const highMatches = scoredRows.filter((r) => r.score >= 75).length;
   const goodMatches = scoredRows.filter((r) => r.score >= 50 && r.score < 75).length;
   const toPursue = scoredRows.filter((r) => r.recommendation === "pursue").length;
+  const gated = scoredRows.filter((r) => r.score === 0).length;
 
   return NextResponse.json({
     success: true,
@@ -158,5 +161,6 @@ export async function POST(
     highMatches,
     goodMatches,
     toPursue,
+    gated,
   });
 }

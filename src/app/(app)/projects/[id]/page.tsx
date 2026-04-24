@@ -24,18 +24,7 @@ import {
 import Link from "next/link";
 import { ProjectActions } from "@/components/project-actions";
 import { MatchButton } from "@/components/match-button";
-
-function getScoreColor(score: number) {
-  if (score >= 75) return "bg-[#c8f76f]";
-  if (score >= 50) return "bg-[#ffe066]";
-  return "bg-[#ffa3d1]";
-}
-
-function getScoreLabel(score: number) {
-  if (score >= 75) return "Excellent match";
-  if (score >= 50) return "Bon match";
-  return "Match partiel";
-}
+import { ProjectMatches } from "@/components/project-matches";
 
 export default async function ProjectDetailPage({
   params,
@@ -70,7 +59,9 @@ export default async function ProjectDetailPage({
       .order("created_at", { ascending: false }),
     supabaseAdmin
       .from("match_scores")
-      .select("*, grants(id, title, funder, deadline, max_amount_eur, source_name)")
+      .select(
+        "*, grants(id, title, funder, summary, deadline, max_amount_eur, source_name, source_url)"
+      )
       .eq("project_id", id)
       .order("score", { ascending: false })
       .limit(50),
@@ -266,15 +257,14 @@ export default async function ProjectDetailPage({
         )}
       </div>
 
-      {/* Match Scores Section — always rendered so the user never lands on
-          an empty page. When no scores exist yet we show a prominent CTA
-          that triggers the heuristic matcher; otherwise we show the top 50. */}
+      {/* Match Scores — always rendered. Empty state guides to first run;
+          otherwise delegates display to ProjectMatches (podium + top-7 + rest). */}
       <div className="mb-10">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-black">
-            Scores de matching{" "}
+            Subventions matchées pour ce projet{" "}
             <span className="text-muted-foreground font-bold">
-              ({matchList.length})
+              ({matchList.filter((m) => m.score > 0).length})
             </span>
           </h2>
           {matchList.length > 0 && (
@@ -311,72 +301,7 @@ export default async function ProjectDetailPage({
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-4">
-            {matchList.map((match) => (
-              <div
-                key={match.id}
-                className="rounded-2xl border-2 border-border bg-card shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px]"
-              >
-                <div className="p-6">
-                  <div className="flex items-start gap-5">
-                    {/* Score circle */}
-                    <div
-                      className={`flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-border text-lg font-black shrink-0 ${getScoreColor(match.score)}`}
-                    >
-                      {match.score}
-                    </div>
-
-                    {/* Grant info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-muted-foreground mb-1">
-                        {getScoreLabel(match.score)}
-                      </p>
-                      <h3 className="text-lg font-black text-foreground">
-                        {match.grants?.title || "Subvention"}
-                      </h3>
-                      <p className="text-sm font-semibold text-muted-foreground">
-                        {match.grants?.funder || ""}
-                      </p>
-
-                      {match.recommendation && (
-                        <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                          {match.recommendation}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-4 mt-3 text-xs font-bold text-muted-foreground">
-                        {match.grants?.deadline && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {new Date(match.grants.deadline).toLocaleDateString("fr-FR")}
-                          </span>
-                        )}
-                        {match.grants?.max_amount_eur && (
-                          <span className="flex items-center gap-1">
-                            <Euro className="h-3 w-3" />
-                            Jusqu&apos;à{" "}
-                            {Number(match.grants.max_amount_eur).toLocaleString("fr-FR")} €
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Action */}
-                    <div className="shrink-0">
-                      <Link
-                        href={`/grants/${match.grants?.id}?project_id=${project.id}`}
-                      >
-                        <Button variant="accent" size="sm">
-                          <Sparkles className="h-4 w-4" />
-                          Générer une proposition
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ProjectMatches matches={matchList} projectId={project.id} />
         )}
       </div>
 

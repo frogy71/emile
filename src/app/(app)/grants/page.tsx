@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -11,12 +10,11 @@ import {
   Calendar,
   Euro,
   Clock,
-  ChevronLeft,
-  ChevronRight,
   Filter,
   X,
   Loader2,
   Sparkles,
+  ArrowDown,
 } from "lucide-react";
 
 type Grant = {
@@ -95,6 +93,7 @@ export default function GrantsPage() {
   const [grants, setGrants] = useState<Grant[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
   const [theme, setTheme] = useState("");
@@ -105,16 +104,21 @@ export default function GrantsPage() {
   const [relaxedLabel, setRelaxedLabel] = useState<string | null>(null);
   const [relaxedFilters, setRelaxedFilters] = useState<string[]>([]);
   const limit = 20;
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const fetchGrants = useCallback(async () => {
+  // Always starts at page 0 when filters change — managed in the individual
+  // filter handlers. Page resets are why we key fetchFirstPage on filters
+  // only (not page).
+  const fetchFirstPage = useCallback(async () => {
     setLoading(true);
+    setPage(0);
     const params = new URLSearchParams();
     if (search) params.set("q", search);
     if (type) params.set("type", type);
     if (theme) params.set("theme", theme);
     if (territory) params.set("territory", territory);
     params.set("limit", String(limit));
-    params.set("offset", String(page * limit));
+    params.set("offset", "0");
 
     try {
       const res = await fetch(`/api/grants?${params.toString()}`);
@@ -133,20 +137,75 @@ export default function GrantsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, type, theme, territory, page]);
+  }, [search, type, theme, territory]);
+
+  // Append-next-page: used by both the "Charger plus" button and the
+  // intersection observer on the sentinel. Guarded against double-fire and
+  // against firing while the initial load is still in flight.
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore) return;
+    if (grants.length >= total) return;
+
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    const params = new URLSearchParams();
+    if (search) params.set("q", search);
+    if (type) params.set("type", type);
+    if (theme) params.set("theme", theme);
+    if (territory) params.set("territory", territory);
+    params.set("limit", String(limit));
+    params.set("offset", String(nextPage * limit));
+
+    try {
+      const res = await fetch(`/api/grants?${params.toString()}`);
+      const data = await res.json();
+      // De-dupe by id in case the user mutated filters mid-flight
+      setGrants((prev) => {
+        const seen = new Set(prev.map((g) => g.id));
+        const incoming = (data.grants as Grant[] | undefined) || [];
+        return [...prev, ...incoming.filter((g) => !seen.has(g.id))];
+      });
+      setPage(nextPage);
+    } catch {
+      // Swallow — the user will see the button still there and can retry
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loading, loadingMore, grants.length, total, page, search, type, theme, territory]);
 
   useEffect(() => {
-    fetchGrants();
-  }, [fetchGrants]);
+    fetchFirstPage();
+  }, [fetchFirstPage]);
 
-  const totalPages = Math.ceil(total / limit);
+  // Auto-load more when the sentinel scrolls into view. Cheap UX that makes
+  // the long-tail feel browsable. Manual button below is the fallback for
+  // keyboard users + when the observer is dormant between loads.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    if (loading || loadingMore) return;
+    if (grants.length === 0 || grants.length >= total) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          loadMore();
+        }
+      },
+      { rootMargin: "400px" } // start fetching before the user hits the end
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loading, loadingMore, grants.length, total, loadMore]);
+
+  const canLoadMore = !loading && !loadingMore && grants.length < total;
+  const loadedAll = total > 0 && grants.length >= total;
 
   const clearFilters = () => {
     setSearch("");
     setType("");
     setTheme("");
     setTerritory("");
-    setPage(0);
   };
 
   const hasFilters = search || type || theme || territory;
@@ -170,10 +229,7 @@ export default function GrantsPage() {
           <Input
             placeholder="Rechercher par titre, bailleur, résumé..."
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(0);
-            }}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
           />
         </div>
@@ -210,10 +266,7 @@ export default function GrantsPage() {
                 {TYPES.map((t) => (
                   <button
                     key={t.value}
-                    onClick={() => {
-                      setType(t.value);
-                      setPage(0);
-                    }}
+                    onClick={() => setType(t.value)}
                     className={`rounded-lg border-2 border-border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                       type === t.value
                         ? "bg-[#c8f76f] shadow-[2px_2px_0px_0px_#1a1a1a]"
@@ -233,10 +286,7 @@ export default function GrantsPage() {
               </label>
               <div className="flex flex-wrap gap-1.5">
                 <button
-                  onClick={() => {
-                    setTheme("");
-                    setPage(0);
-                  }}
+                  onClick={() => setTheme("")}
                   className={`rounded-lg border-2 border-border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                     theme === ""
                       ? "bg-[#ffe066] shadow-[2px_2px_0px_0px_#1a1a1a]"
@@ -248,10 +298,7 @@ export default function GrantsPage() {
                 {THEMES.map((t) => (
                   <button
                     key={t}
-                    onClick={() => {
-                      setTheme(t);
-                      setPage(0);
-                    }}
+                    onClick={() => setTheme(t)}
                     className={`rounded-lg border-2 border-border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                       theme === t
                         ? "bg-[#ffe066] shadow-[2px_2px_0px_0px_#1a1a1a]"
@@ -271,10 +318,7 @@ export default function GrantsPage() {
               </label>
               <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
                 <button
-                  onClick={() => {
-                    setTerritory("");
-                    setPage(0);
-                  }}
+                  onClick={() => setTerritory("")}
                   className={`rounded-lg border-2 border-border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                     territory === ""
                       ? "bg-[#a3d5ff] shadow-[2px_2px_0px_0px_#1a1a1a]"
@@ -286,10 +330,7 @@ export default function GrantsPage() {
                 {TERRITORIES.map((t) => (
                   <button
                     key={t}
-                    onClick={() => {
-                      setTerritory(t);
-                      setPage(0);
-                    }}
+                    onClick={() => setTerritory(t)}
                     className={`rounded-lg border-2 border-border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                       territory === t
                         ? "bg-[#a3d5ff] shadow-[2px_2px_0px_0px_#1a1a1a]"
@@ -448,34 +489,37 @@ export default function GrantsPage() {
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-6">
+      {/* Load-more / infinite-scroll sentinel */}
+      {!loading && grants.length > 0 && (
+        <div className="mt-8 flex flex-col items-center gap-3">
           <p className="text-sm font-bold text-muted-foreground">
-            Page {page + 1} sur {totalPages} — {total} résultats
+            {grants.length} / {total} subventions affichées
           </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Précédent
+
+          {canLoadMore && (
+            <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Chargement…
+                </>
+              ) : (
+                <>
+                  <ArrowDown className="h-4 w-4" />
+                  Charger plus
+                </>
+              )}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setPage((p) => Math.min(totalPages - 1, p + 1))
-              }
-              disabled={page >= totalPages - 1}
-            >
-              Suivant
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+          )}
+
+          {loadedAll && (
+            <p className="text-xs font-medium text-muted-foreground">
+              Tu as tout parcouru — essaie un filtre pour affiner.
+            </p>
+          )}
+
+          {/* Sentinel — when this scrolls into view the observer fires loadMore */}
+          <div ref={sentinelRef} className="h-1 w-full" aria-hidden />
         </div>
       )}
     </div>

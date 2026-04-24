@@ -5,14 +5,27 @@
  *
  * 🔴 CRITICAL (API — automated):
  * 1. Aides-Territoires — ~3,000 aids (État + Régions + Départements + EPCI)
- * 2. EU Funding & Tenders — ~500 EU calls (CERV, Erasmus+, LIFE, ESF+)
- * 3. EuropeAid / INTPA — humanitarian + development calls
+ * 2. EU Funding & Tenders — ~800 EU calls (splits into EuropeAid/INTPA too)
+ *
+ * 🟠 FR national programs:
+ * 3. data.gouv.fr — FRUP + Fondations d'entreprises
+ * 4. BPI France — innovation
+ * 5. Fondations curated + Fondation de France live
+ * 6. ADEME — transition écologique
+ * 7. FDVA — vie associative
+ * 8. ANS — sport
  *
  * Run strategy:
- * - Full sync: weekly (Sunday night)
- * - Incremental: daily (new grants only)
+ * - Full sync: weekly (Sunday 2am)
+ * - Incremental daily (6am): Aides-Territoires + EU + Fondation de France
+ * - Cleanup (4am daily): mark expired grants
  * - On-demand: triggered by admin
+ *
+ * Every source run is persisted to `ingestion_logs` so the admin dashboard
+ * can surface health, trends and error rates.
  */
+
+import { randomUUID } from "crypto";
 
 import {
   fetchAllAidesAssociations,
@@ -20,11 +33,21 @@ import {
 } from "./aides-territoires";
 import { fetchEUOpenCalls, transformEUToGrant } from "./eu-funding";
 // EuropeAid is now handled by the EU Funding SEDIA ingestion (split by source_name)
-// import { fetchEuropeAidCalls, transformEuropeAidToGrant } from "./europeaid";
 import { fetchFRUP, transformFRUPToGrant, fetchFondationsEntreprises, transformFEToGrant } from "./data-gouv";
 import { fetchBpiGrants, transformBpiToGrant } from "./bpifrance";
 import { fetchCuratedFoundations, transformCuratedToGrant } from "./fondations-curated";
 import { fetchFondationDeFrance, transformFDFToGrant } from "./fondation-de-france";
+import { fetchADEME, transformADEMEToGrant } from "./ademe";
+import { fetchFDVA, transformFDVAToGrant } from "./fdva";
+import { fetchANS, transformANSToGrant } from "./ans";
+
+export type IngestionTrigger =
+  | "manual"
+  | "cron-daily"
+  | "cron-weekly"
+  | "admin";
+
+export type IngestionStatus = "running" | "success" | "partial" | "failed";
 
 export interface IngestionResult {
   source: string;
@@ -34,33 +57,138 @@ export interface IngestionResult {
   skipped: number;
   errors: number;
   duration_ms: number;
+  status: IngestionStatus;
+  error_message?: string | null;
 }
 
 export interface IngestionReport {
+  runId: string;
+  trigger: IngestionTrigger;
   startedAt: string;
   completedAt: string;
   totalFetched: number;
   totalInserted: number;
   totalSkipped: number;
+  totalErrors: number;
   sources: IngestionResult[];
 }
 
-/**
- * Insert grants into Supabase via REST API
- * Uses upsert (insert or update on conflict) based on source_url
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function upsertGrants(
-  grants: Record<string, any>[]
-): Promise<{ inserted: number; skipped: number; errors: number }> {
+export interface IngestionOptions {
+  /** Which label to record on ingestion_logs.trigger */
+  trigger?: IngestionTrigger;
+  /** Only run these sources (incremental). Omit to run everything. */
+  only?: string[];
+  /** Shared run id across all sources (optional — generated if absent). */
+  runId?: string;
+}
+
+// ───────────────────────────────────────────────────────────────
+// Supabase helpers
+// ───────────────────────────────────────────────────────────────
+
+function getSupabaseCreds() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  return { supabaseUrl, serviceKey };
+}
+
+/**
+ * Insert a log row for a running source. Returns its id so the caller can
+ * patch it with completion data. Fire-and-forget safe — logging failures
+ * never break ingestion.
+ */
+async function openIngestionLog(
+  runId: string,
+  sourceName: string,
+  trigger: IngestionTrigger
+): Promise<string | null> {
+  try {
+    const { supabaseUrl, serviceKey } = getSupabaseCreds();
+    const res = await fetch(`${supabaseUrl}/rest/v1/ingestion_logs`, {
+      method: "POST",
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        run_id: runId,
+        source_name: sourceName,
+        status: "running",
+        trigger,
+        started_at: new Date().toISOString(),
+      }),
+    });
+    if (!res.ok) return null;
+    const [row] = await res.json();
+    return row?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function closeIngestionLog(
+  id: string | null,
+  patch: {
+    status: IngestionStatus;
+    fetched: number;
+    transformed: number;
+    inserted: number;
+    skipped: number;
+    errors: number;
+    duration_ms: number;
+    error_message?: string | null;
+    error_details?: unknown;
+  }
+): Promise<void> {
+  if (!id) return;
+  try {
+    const { supabaseUrl, serviceKey } = getSupabaseCreds();
+    await fetch(`${supabaseUrl}/rest/v1/ingestion_logs?id=eq.${id}`, {
+      method: "PATCH",
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        completed_at: new Date().toISOString(),
+        status: patch.status,
+        fetched: patch.fetched,
+        transformed: patch.transformed,
+        inserted: patch.inserted,
+        skipped: patch.skipped,
+        errors: patch.errors,
+        duration_ms: patch.duration_ms,
+        error_message: patch.error_message ?? null,
+        error_details: patch.error_details
+          ? JSON.parse(JSON.stringify(patch.error_details))
+          : null,
+      }),
+    });
+  } catch {
+    // logging is best-effort
+  }
+}
+
+/**
+ * Upsert grants in chunks of 50 via the Supabase REST API.
+ *
+ * Uses Prefer: resolution=merge-duplicates so existing grants are updated in
+ * place (idempotent nightly runs).
+ */
+async function upsertGrants(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  grants: Record<string, any>[]
+): Promise<{ inserted: number; skipped: number; errors: number }> {
+  const { supabaseUrl, serviceKey } = getSupabaseCreds();
 
   let inserted = 0;
   let skipped = 0;
   let errors = 0;
 
-  // Batch upsert in chunks of 50
   const chunkSize = 50;
   for (let i = 0; i < grants.length; i += chunkSize) {
     const chunk = grants.slice(i, i + chunkSize).map((g) => ({
@@ -77,11 +205,12 @@ async function upsertGrants(
       min_amount_eur: g.minAmountEur,
       max_amount_eur: g.maxAmountEur,
       co_financing_required: g.coFinancingRequired,
-      deadline: g.deadline?.toISOString() || null,
+      deadline: g.deadline?.toISOString?.() ?? g.deadline ?? null,
       grant_type: g.grantType,
       language: g.language,
       status: g.status,
       ai_summary: g.aiSummary,
+      updated_at: new Date().toISOString(),
     }));
 
     try {
@@ -100,7 +229,6 @@ async function upsertGrants(
         inserted += chunk.length;
       } else {
         const errText = await res.text();
-        // If it's a duplicate error, count as skipped
         if (errText.includes("duplicate") || errText.includes("unique")) {
           skipped += chunk.length;
         } else {
@@ -116,7 +244,6 @@ async function upsertGrants(
       errors += chunk.length;
     }
 
-    // Log progress
     if ((i + chunkSize) % 200 === 0 || i + chunkSize >= grants.length) {
       console.log(
         `[Upsert] Progress: ${Math.min(i + chunkSize, grants.length)}/${grants.length}`
@@ -127,136 +254,280 @@ async function upsertGrants(
   return { inserted, skipped, errors };
 }
 
+// ───────────────────────────────────────────────────────────────
+// Source registry
+// ───────────────────────────────────────────────────────────────
+
+type SourceSpec = {
+  name: string;
+  /** Fast, free sources we run daily. Slower / static sources run weekly. */
+  cadence: "daily" | "weekly";
+  run: () => Promise<Record<string, unknown>[]>;
+};
+
+const SOURCES: SourceSpec[] = [
+  {
+    name: "Aides-Territoires",
+    cadence: "daily",
+    run: async () => {
+      const raw = await fetchAllAidesAssociations();
+      return raw.map(transformToGrant);
+    },
+  },
+  {
+    name: "EU Funding & Tenders",
+    cadence: "daily",
+    run: async () => {
+      const raw = await fetchEUOpenCalls();
+      return raw.map(transformEUToGrant);
+    },
+  },
+  {
+    name: "Fondation de France (appels actifs)",
+    cadence: "daily",
+    run: async () => {
+      const raw = await fetchFondationDeFrance();
+      return raw.map(transformFDFToGrant);
+    },
+  },
+  {
+    name: "BPI France",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchBpiGrants();
+      return raw.map(transformBpiToGrant);
+    },
+  },
+  {
+    name: "data.gouv.fr — FRUP",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchFRUP();
+      return raw.map((row, i) => transformFRUPToGrant(row, i));
+    },
+  },
+  {
+    name: "data.gouv.fr — Fondations entreprises",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchFondationsEntreprises();
+      return raw.map((row, i) => transformFEToGrant(row, i));
+    },
+  },
+  {
+    name: "Fondations françaises (curated)",
+    cadence: "weekly",
+    run: async () => {
+      const raw = fetchCuratedFoundations();
+      return raw.map(transformCuratedToGrant);
+    },
+  },
+  {
+    name: "ADEME — Agir pour la transition",
+    cadence: "daily",
+    run: async () => {
+      const raw = await fetchADEME();
+      return raw.map(transformADEMEToGrant);
+    },
+  },
+  {
+    name: "FDVA — Vie associative",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchFDVA();
+      return raw.map(transformFDVAToGrant);
+    },
+  },
+  {
+    name: "ANS — Agence nationale du sport",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchANS();
+      return raw.map(transformANSToGrant);
+    },
+  },
+];
+
+// ───────────────────────────────────────────────────────────────
+// Ingestion runner
+// ───────────────────────────────────────────────────────────────
+
 /**
- * Run full ingestion from all automated sources
+ * Mark every active grant whose deadline is in the past as expired.
+ * Safe to call frequently — idempotent.
  */
-export async function runFullIngestion(): Promise<IngestionReport> {
-  const startedAt = new Date().toISOString();
-  const sources: IngestionResult[] = [];
-
-  console.log("=== Starting full ingestion ===");
-
-  // 1. Aides-Territoires (biggest source)
-  const at = await ingestSource("Aides-Territoires", async () => {
-    const raw = await fetchAllAidesAssociations();
-    return raw.map(transformToGrant);
-  });
-  sources.push(at);
-
-  // 2. EU Funding & Tenders
-  const eu = await ingestSource("EU Funding & Tenders", async () => {
-    const raw = await fetchEUOpenCalls();
-    return raw.map(transformEUToGrant);
-  });
-  sources.push(eu);
-
-  // 3. EuropeAid / INTPA — now merged into EU Funding ingestion.
-  //    SEDIA returns humanitarian programmes (INTPA/NDICI/HUMA/IPA) alongside
-  //    regular EU programmes; transformEUToGrant splits them by source_name.
-  //    Keep a placeholder entry so the report stays consistent.
-  sources.push({
-    source: "EuropeAid / INTPA",
-    fetched: 0,
-    transformed: 0,
-    inserted: 0,
-    skipped: 0,
-    errors: 0,
-    duration_ms: 0,
-  });
-
-  // 4. data.gouv.fr — FRUP
-  const frup = await ingestSource("data.gouv.fr — FRUP", async () => {
-    const raw = await fetchFRUP();
-    return raw.map((row, i) => transformFRUPToGrant(row, i));
-  });
-  sources.push(frup);
-
-  // 5. data.gouv.fr — Fondations d'entreprises
-  const fe = await ingestSource("data.gouv.fr — Fondations entreprises", async () => {
-    const raw = await fetchFondationsEntreprises();
-    return raw.map((row, i) => transformFEToGrant(row, i));
-  });
-  sources.push(fe);
-
-  // 6. BPI France
-  const bpi = await ingestSource("BPI France", async () => {
-    const raw = await fetchBpiGrants();
-    return raw.map(transformBpiToGrant);
-  });
-  sources.push(bpi);
-
-  // 7. Fondations françaises (curated)
-  const curated = await ingestSource("Fondations françaises (curated)", async () => {
-    const raw = fetchCuratedFoundations();
-    return raw.map(transformCuratedToGrant);
-  });
-  sources.push(curated);
-
-  // 8. Fondation de France — live scraping of active calls
-  const fdf = await ingestSource("Fondation de France (appels actifs)", async () => {
-    const raw = await fetchFondationDeFrance();
-    return raw.map(transformFDFToGrant);
-  });
-  sources.push(fdf);
-
-  const completedAt = new Date().toISOString();
-
-  const report: IngestionReport = {
-    startedAt,
-    completedAt,
-    totalFetched: sources.reduce((sum, s) => sum + s.fetched, 0),
-    totalInserted: sources.reduce((sum, s) => sum + s.inserted, 0),
-    totalSkipped: sources.reduce((sum, s) => sum + s.skipped, 0),
-    sources,
-  };
-
-  console.log("=== Ingestion complete ===");
-  console.log(
-    `Total: ${report.totalFetched} fetched, ${report.totalInserted} inserted, ${report.totalSkipped} skipped`
-  );
-
-  return report;
+export async function markExpiredGrants(): Promise<number> {
+  const { supabaseUrl, serviceKey } = getSupabaseCreds();
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/grants?status=eq.active&deadline=lt.${new Date().toISOString()}`,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({ status: "expired" }),
+      }
+    );
+    if (!res.ok) return 0;
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows.length : 0;
+  } catch (e) {
+    console.error("[markExpiredGrants] failed:", e);
+    return 0;
+  }
 }
 
-/**
- * Run ingestion for a single source with error handling and DB insert
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function ingestSource(
+  runId: string,
   name: string,
-  fetchAndTransform: () => Promise<Record<string, any>[]>
+  trigger: IngestionTrigger,
+  fetchAndTransform: () => Promise<Record<string, unknown>[]>
 ): Promise<IngestionResult> {
   const start = Date.now();
+  const logId = await openIngestionLog(runId, name, trigger);
+
   try {
     console.log(`[${name}] Fetching...`);
     const grants = await fetchAndTransform();
-    console.log(`[${name}] Fetched ${grants.length} grants, upserting to DB...`);
+    console.log(`[${name}] Fetched ${grants.length} grants, upserting...`);
 
     const { inserted, skipped, errors } = await upsertGrants(grants);
 
+    const status: IngestionStatus =
+      errors === 0 ? "success" : errors < grants.length ? "partial" : "failed";
+
+    const duration_ms = Date.now() - start;
+
     console.log(
-      `[${name}] Done: ${inserted} inserted, ${skipped} skipped, ${errors} errors`
+      `[${name}] Done: ${inserted} inserted, ${skipped} skipped, ${errors} errors (${duration_ms}ms)`
     );
 
-    return {
+    const result: IngestionResult = {
       source: name,
       fetched: grants.length,
       transformed: grants.length,
       inserted,
       skipped,
       errors,
-      duration_ms: Date.now() - start,
+      duration_ms,
+      status,
+      error_message: null,
     };
+
+    await closeIngestionLog(logId, {
+      status,
+      fetched: grants.length,
+      transformed: grants.length,
+      inserted,
+      skipped,
+      errors,
+      duration_ms,
+    });
+
+    return result;
   } catch (error) {
-    console.error(`[${name}] Ingestion failed:`, error);
-    return {
+    const duration_ms = Date.now() - start;
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+    console.error(`[${name}] Ingestion failed:`, errorMessage);
+
+    const result: IngestionResult = {
       source: name,
       fetched: 0,
       transformed: 0,
       inserted: 0,
       skipped: 0,
       errors: 1,
-      duration_ms: Date.now() - start,
+      duration_ms,
+      status: "failed",
+      error_message: errorMessage,
     };
+
+    await closeIngestionLog(logId, {
+      status: "failed",
+      fetched: 0,
+      transformed: 0,
+      inserted: 0,
+      skipped: 0,
+      errors: 1,
+      duration_ms,
+      error_message: errorMessage,
+      error_details: { stack: error instanceof Error ? error.stack : null },
+    });
+
+    return result;
   }
 }
+
+/**
+ * Run every registered source. Used by the weekly cron and admin "force full".
+ */
+export async function runFullIngestion(
+  options: IngestionOptions = {}
+): Promise<IngestionReport> {
+  return runIngestion({ ...options });
+}
+
+/**
+ * Run only the "daily" cadence sources. Used by the nightly cron.
+ */
+export async function runDailyIngestion(
+  options: IngestionOptions = {}
+): Promise<IngestionReport> {
+  const only = SOURCES.filter((s) => s.cadence === "daily").map((s) => s.name);
+  return runIngestion({ ...options, only });
+}
+
+/**
+ * Generic runner — runs all sources by default, or just the ones whose name
+ * appears in `only`.
+ */
+export async function runIngestion(
+  options: IngestionOptions = {}
+): Promise<IngestionReport> {
+  const runId = options.runId ?? randomUUID();
+  const trigger = options.trigger ?? "manual";
+  const startedAt = new Date().toISOString();
+  const sources: IngestionResult[] = [];
+
+  const selected = options.only
+    ? SOURCES.filter((s) => options.only!.includes(s.name))
+    : SOURCES;
+
+  console.log(
+    `=== Ingestion start (run ${runId}, trigger=${trigger}, ${selected.length} sources) ===`
+  );
+
+  for (const spec of selected) {
+    const result = await ingestSource(runId, spec.name, trigger, spec.run);
+    sources.push(result);
+  }
+
+  const completedAt = new Date().toISOString();
+
+  const report: IngestionReport = {
+    runId,
+    trigger,
+    startedAt,
+    completedAt,
+    totalFetched: sources.reduce((sum, s) => sum + s.fetched, 0),
+    totalInserted: sources.reduce((sum, s) => sum + s.inserted, 0),
+    totalSkipped: sources.reduce((sum, s) => sum + s.skipped, 0),
+    totalErrors: sources.reduce((sum, s) => sum + s.errors, 0),
+    sources,
+  };
+
+  console.log("=== Ingestion complete ===");
+  console.log(
+    `Total: ${report.totalFetched} fetched, ${report.totalInserted} inserted, ${report.totalSkipped} skipped, ${report.totalErrors} errors`
+  );
+
+  return report;
+}
+
+// Back-compat named export
+export { SOURCES as INGESTION_SOURCES };

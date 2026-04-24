@@ -1,22 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { runDailyIngestion, markExpiredGrants } from "@/lib/ingestion";
+import { runFullIngestion, markExpiredGrants } from "@/lib/ingestion";
 
 /**
- * CRON: daily incremental grant update (Vercel cron, 06:00 UTC)
+ * CRON: weekly full ingestion (Sunday 02:00 UTC)
  *
- * Runs only the "daily" sources (Aides-Territoires, EU Funding, Fondation de
- * France, ADEME) — the fast API / scraping sources we want to keep fresh.
- * Heavy / static sources run in the weekly cron.
+ * Runs every configured source, including the slower / static ones
+ * (data.gouv.fr FRUP, Fondations entreprises, BPI, curated foundations, FDVA,
+ * ANS). This is the "ground truth" sync that guarantees exhaustiveness.
  *
- * After the run we mark expired grants (deadline < now) so the catalog stays
- * clean for the user-facing matching.
- *
- * Auth:
- * - Vercel sends `Authorization: Bearer <CRON_SECRET>` if set in env
- * - Manual calls from the admin dashboard use the user session (no secret)
- * - The admin UI calls a dedicated route (/api/admin/ingest) which bypasses
- *   this check via Supabase session instead
+ * If Aides-Territoires or another API is temporarily down mid-week, the
+ * weekly run catches up when it recovers.
  */
 function getSupabase() {
   return createClient(
@@ -33,11 +27,11 @@ async function handle(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = getSupabase();
   const startTime = Date.now();
+  const supabase = getSupabase();
 
   try {
-    const report = await runDailyIngestion({ trigger: "cron-daily" });
+    const report = await runFullIngestion({ trigger: "cron-weekly" });
     const expired = await markExpiredGrants();
 
     const { count: totalGrants } = await supabase
@@ -51,7 +45,7 @@ async function handle(request: Request) {
 
     const duration_seconds = Math.round((Date.now() - startTime) / 1000);
 
-    console.log("[CRON daily] complete", {
+    console.log("[CRON weekly-full] complete", {
       runId: report.runId,
       totalFetched: report.totalFetched,
       totalInserted: report.totalInserted,
@@ -73,7 +67,7 @@ async function handle(request: Request) {
       active_grants: activeGrants,
     });
   } catch (error) {
-    console.error("[CRON daily] failed:", error);
+    console.error("[CRON weekly-full] failed:", error);
     return NextResponse.json(
       {
         success: false,
@@ -86,4 +80,4 @@ async function handle(request: Request) {
 
 export const GET = handle;
 export const POST = handle;
-export const maxDuration = 800; // Vercel Pro: 15min, free: 60s
+export const maxDuration = 800;

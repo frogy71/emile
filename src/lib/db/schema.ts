@@ -126,6 +126,25 @@ export const alertPreferences = pgTable("alert_preferences", {
   lastSentAt: timestamp("last_sent_at", { withTimezone: true }),
 });
 
+// ─── Ingestion Logs (source run telemetry) ──────────────────────
+export const ingestionLogs = pgTable("ingestion_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: uuid("run_id").notNull(),
+  sourceName: text("source_name").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  status: text("status").default("running").notNull(), // running | success | partial | failed
+  fetched: integer("fetched").default(0),
+  transformed: integer("transformed").default(0),
+  inserted: integer("inserted").default(0),
+  skipped: integer("skipped").default(0),
+  errors: integer("errors").default(0),
+  durationMs: integer("duration_ms").default(0),
+  errorMessage: text("error_message"),
+  errorDetails: jsonb("error_details"),
+  trigger: text("trigger").default("manual"), // manual | cron-daily | cron-weekly | admin
+});
+
 // ─── Type exports ────────────────────────────────────────────────
 export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
@@ -135,3 +154,5 @@ export type Grant = typeof grants.$inferSelect;
 export type NewGrant = typeof grants.$inferInsert;
 export type MatchScore = typeof matchScores.$inferSelect;
 export type Proposal = typeof proposals.$inferSelect;
+export type IngestionLog = typeof ingestionLogs.$inferSelect;
+export type NewIngestionLog = typeof ingestionLogs.$inferInsert;

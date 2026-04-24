@@ -37,6 +37,8 @@ import { fetchFRUP, transformFRUPToGrant, fetchFondationsEntreprises, transformF
 import { fetchBpiGrants, transformBpiToGrant } from "./bpifrance";
 import { fetchCuratedFoundations, transformCuratedToGrant } from "./fondations-curated";
 import { fetchFondationDeFrance, transformFDFToGrant } from "./fondation-de-france";
+import { crawlFoundationPortalsSnapshots } from "./foundation-portal-crawler";
+import { reconcileFoundationPortals } from "./foundation-portal-reconciler";
 import { fetchADEME, transformADEMEToGrant } from "./ademe";
 import { fetchFDVA, transformFDVAToGrant } from "./fdva";
 import { fetchANS, transformANSToGrant } from "./ans";
@@ -262,7 +264,22 @@ type SourceSpec = {
   name: string;
   /** Fast, free sources we run daily. Slower / static sources run weekly. */
   cadence: "daily" | "weekly";
-  run: () => Promise<Record<string, unknown>[]>;
+  /**
+   * Default path: return grants, orchestrator handles upserts.
+   * Used by ~all sources.
+   */
+  run?: () => Promise<Record<string, unknown>[]>;
+  /**
+   * Escape hatch: source handles its own persistence (lifecycle
+   * tracking, upserts, events). The orchestrator just logs + timestamps.
+   * Used by the foundation portal crawler (via the reconciler).
+   */
+  customIngest?: (runId: string) => Promise<{
+    fetched: number;
+    inserted: number;
+    skipped: number;
+    errors: number;
+  }>;
 };
 
 const SOURCES: SourceSpec[] = [
@@ -320,6 +337,39 @@ const SOURCES: SourceSpec[] = [
     run: async () => {
       const raw = fetchCuratedFoundations();
       return raw.map(transformCuratedToGrant);
+    },
+  },
+  {
+    // Crawls each curated foundation's portal and extracts their active
+    // "appels à projets" (calls for projects) as individual grants.
+    // Runs weekly since it's the slowest source (LLM extraction × 150 sites).
+    //
+    // Uses customIngest because the reconciler handles lifecycle events
+    // (opened/closed/disappeared/reopened) and writes its own upserts —
+    // the generic upsertGrants path would lose that metadata.
+    name: "Fondations privées — appels actifs",
+    cadence: "weekly",
+    customIngest: async (runId) => {
+      const snapshots = await crawlFoundationPortalsSnapshots({
+        budgetSeconds: 240,
+      });
+      const res = await reconcileFoundationPortals(snapshots, runId);
+      const fetched = snapshots.reduce((n, s) => n + s.calls.length, 0);
+      // "inserted" in the ingestion_logs view = grants actually added OR
+      // updated with a lifecycle transition, so opened + reopened +
+      // still_open + closed + disappeared all count.
+      const inserted =
+        res.opened +
+        res.reopened +
+        res.stillOpen +
+        res.closed +
+        res.disappeared;
+      return {
+        fetched,
+        inserted,
+        skipped: 0,
+        errors: res.foundationsSkippedUnreachable,
+      };
     },
   },
   {
@@ -385,20 +435,39 @@ async function ingestSource(
   runId: string,
   name: string,
   trigger: IngestionTrigger,
-  fetchAndTransform: () => Promise<Record<string, unknown>[]>
+  spec: SourceSpec
 ): Promise<IngestionResult> {
   const start = Date.now();
   const logId = await openIngestionLog(runId, name, trigger);
 
   try {
-    console.log(`[${name}] Fetching...`);
-    const grants = await fetchAndTransform();
-    console.log(`[${name}] Fetched ${grants.length} grants, upserting...`);
+    let fetched: number;
+    let inserted: number;
+    let skipped: number;
+    let errors: number;
 
-    const { inserted, skipped, errors } = await upsertGrants(grants);
+    if (spec.customIngest) {
+      console.log(`[${name}] Running custom ingest (self-managed upserts)...`);
+      const r = await spec.customIngest(runId);
+      fetched = r.fetched;
+      inserted = r.inserted;
+      skipped = r.skipped;
+      errors = r.errors;
+    } else if (spec.run) {
+      console.log(`[${name}] Fetching...`);
+      const grants = await spec.run();
+      console.log(`[${name}] Fetched ${grants.length} grants, upserting...`);
+      const r = await upsertGrants(grants);
+      fetched = grants.length;
+      inserted = r.inserted;
+      skipped = r.skipped;
+      errors = r.errors;
+    } else {
+      throw new Error(`Source "${name}" has neither run nor customIngest`);
+    }
 
     const status: IngestionStatus =
-      errors === 0 ? "success" : errors < grants.length ? "partial" : "failed";
+      errors === 0 ? "success" : errors < fetched ? "partial" : "failed";
 
     const duration_ms = Date.now() - start;
 
@@ -408,8 +477,8 @@ async function ingestSource(
 
     const result: IngestionResult = {
       source: name,
-      fetched: grants.length,
-      transformed: grants.length,
+      fetched,
+      transformed: fetched,
       inserted,
       skipped,
       errors,
@@ -420,8 +489,8 @@ async function ingestSource(
 
     await closeIngestionLog(logId, {
       status,
-      fetched: grants.length,
-      transformed: grants.length,
+      fetched,
+      transformed: fetched,
       inserted,
       skipped,
       errors,
@@ -503,7 +572,7 @@ export async function runIngestion(
   );
 
   for (const spec of selected) {
-    const result = await ingestSource(runId, spec.name, trigger, spec.run);
+    const result = await ingestSource(runId, spec.name, trigger, spec);
     sources.push(result);
   }
 

@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Globe,
   MapPin,
+  Phone,
   Sparkles,
   Target,
 } from "lucide-react";
@@ -104,6 +105,15 @@ export default async function GrantDetailPage({
           (1000 * 60 * 60 * 24)
       )
     : null;
+
+  // Foundation detection — we surface a prominent "Contacter la fondation"
+  // CTA on every foundation grant, since direct outreach is the single
+  // biggest unlock with private foundations (their decisions are
+  // discretionary and human).
+  const isFoundation =
+    grant.grant_type === "fondation" ||
+    (typeof grant.source_name === "string" &&
+      /fondation/i.test(grant.source_name));
 
   return (
     <div>
@@ -281,7 +291,20 @@ export default async function GrantDetailPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {grant.source_url && (
+            {grant.source_url && isFoundation && (
+              <a
+                href={grant.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="accent">
+                  <Phone className="h-4 w-4" />
+                  Contacter la fondation
+                </Button>
+              </a>
+            )}
+
+            {grant.source_url && !isFoundation && (
               <a
                 href={grant.source_url}
                 target="_blank"

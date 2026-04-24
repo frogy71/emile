@@ -259,7 +259,9 @@ function PodiumCard({
                   En savoir plus sur la subvention
                 </Button>
               </Link>
-              {isExceptional && isFoundation && grant.source_url && (
+              {/* Contact button always shown for private foundations — direct
+                  outreach is the single biggest unlock, regardless of score. */}
+              {isFoundation && grant.source_url && (
                 <a
                   href={grant.source_url}
                   target="_blank"
@@ -378,7 +380,8 @@ function TopCard({
                 En savoir plus
               </Button>
             </Link>
-            {isExceptional && isFoundation && grant.source_url && (
+            {/* Contact button always shown for private foundations. */}
+            {isFoundation && grant.source_url && (
               <a
                 href={grant.source_url}
                 target="_blank"

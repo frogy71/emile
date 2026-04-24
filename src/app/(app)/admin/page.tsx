@@ -70,6 +70,69 @@ interface IngestionHealth {
   }>;
 }
 
+// ── Foundation portal health (Fondations privées — appels actifs) ──
+type FoundationPortalHealth = "healthy" | "no_calls" | "unreachable" | "unknown";
+type FoundationEventType =
+  | "opened"
+  | "still_open"
+  | "deadline_changed"
+  | "closing_soon"
+  | "disappeared"
+  | "closed"
+  | "reopened";
+
+interface FoundationHealthResponse {
+  timestamp: string;
+  totals: {
+    totalPortals: number;
+    healthyPortals: number;
+    noCallsPortals: number;
+    unreachablePortals: number;
+    totalCalls: number;
+    activeCalls: number;
+    closingSoonCalls: number;
+  };
+  counts30d: {
+    opened: number;
+    closed: number;
+    disappeared: number;
+    reopened: number;
+    closingSoon: number;
+    deadlineChanged: number;
+  };
+  portals: Array<{
+    funder: string;
+    portalUrl: string;
+    lastCrawledAt: string | null;
+    lastSuccessAt: string | null;
+    lastReachable: boolean;
+    activeCalls: number;
+    health: FoundationPortalHealth;
+    lastError: string | null;
+    emptyCrawlsInARow: number;
+    events30d: {
+      opened: number;
+      closed: number;
+      disappeared: number;
+      reopened: number;
+      closingSoon: number;
+      deadlineChanged: number;
+      lastEventAt: string | null;
+    } | null;
+  }>;
+  recentEvents: Array<{
+    id: string;
+    grantId: string;
+    eventType: FoundationEventType;
+    detectedAt: string;
+    previousStatus: string | null;
+    newStatus: string | null;
+    notes: string | null;
+    grantTitle: string | null;
+    funder: string | null;
+  }>;
+}
+
 interface AiCostSummary {
   totalCalls: number;
   totalCostUsd: number;
@@ -127,6 +190,8 @@ interface AdminStats {
 export default function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [health, setHealth] = useState<IngestionHealth | null>(null);
+  const [foundationHealth, setFoundationHealth] =
+    useState<FoundationHealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +199,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchStats();
     fetchIngestionHealth();
+    fetchFoundationHealth();
   }, []);
 
   async function fetchIngestionHealth() {
@@ -151,6 +217,24 @@ export default function AdminDashboard() {
       setHealth(data);
     } catch (e) {
       console.error("Failed to load ingestion health:", e);
+    }
+  }
+
+  async function fetchFoundationHealth() {
+    try {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const res = await fetch("/api/admin/foundation-health", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as FoundationHealthResponse;
+      setFoundationHealth(data);
+    } catch (e) {
+      console.error("Failed to load foundation health:", e);
     }
   }
 
@@ -808,6 +892,239 @@ export default function AdminDashboard() {
           </p>
         )}
       </div>
+
+      {/* Foundation portals — lifecycle monitoring */}
+      {foundationHealth && (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-black">Fondations privées — portails</h2>
+            <span className="text-xs text-muted-foreground font-bold">
+              Cycle de vie des AAP (30 derniers jours)
+            </span>
+          </div>
+
+          {/* KPI cards */}
+          <div className="grid gap-3 md:grid-cols-4 mb-4">
+            <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-4 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <p className="text-3xl font-black">
+                {foundationHealth.totals.activeCalls}
+              </p>
+              <p className="text-xs font-bold uppercase tracking-wider mt-1">
+                AAP actifs
+              </p>
+            </div>
+            <div className="rounded-2xl border-2 border-border bg-[#ffe066] p-4 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <p className="text-3xl font-black">
+                {foundationHealth.totals.closingSoonCalls}
+              </p>
+              <p className="text-xs font-bold uppercase tracking-wider mt-1">
+                Clôture ≤ 14 j
+              </p>
+            </div>
+            <div className="rounded-2xl border-2 border-border bg-[#ffa3d1] p-4 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <p className="text-3xl font-black">
+                {foundationHealth.counts30d.opened}
+              </p>
+              <p className="text-xs font-bold uppercase tracking-wider mt-1">
+                Ouverts (30 j)
+              </p>
+            </div>
+            <div className="rounded-2xl border-2 border-border bg-card p-4 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <p className="text-3xl font-black">
+                {foundationHealth.totals.healthyPortals} /{" "}
+                {foundationHealth.totals.totalPortals}
+              </p>
+              <p className="text-xs font-bold uppercase tracking-wider mt-1">
+                Portails sains
+              </p>
+              {(foundationHealth.totals.noCallsPortals > 0 ||
+                foundationHealth.totals.unreachablePortals > 0) && (
+                <p className="text-xs text-red-600 font-bold mt-1">
+                  ⚠ {foundationHealth.totals.noCallsPortals} sans AAP ·{" "}
+                  {foundationHealth.totals.unreachablePortals} injoignables
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Per-portal table (truncated to portals with signal) */}
+          <div className="rounded-2xl border-2 border-border bg-card shadow-[4px_4px_0px_0px_#1a1a1a] overflow-hidden mb-4">
+            <table className="w-full text-sm">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="px-3 py-2 text-left font-black text-xs">
+                    Fondation
+                  </th>
+                  <th className="px-3 py-2 text-left font-black text-xs">
+                    Santé
+                  </th>
+                  <th className="px-3 py-2 text-right font-black text-xs">
+                    AAP actifs
+                  </th>
+                  <th className="px-3 py-2 text-right font-black text-xs">
+                    Ouverts 30j
+                  </th>
+                  <th className="px-3 py-2 text-right font-black text-xs">
+                    Fermés 30j
+                  </th>
+                  <th className="px-3 py-2 text-left font-black text-xs">
+                    Dernier crawl
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {foundationHealth.portals.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-3 py-4 text-center text-muted-foreground font-medium"
+                    >
+                      Aucun portail fondation crawlé pour l&apos;instant. Lance
+                      la source « Fondations privées — appels actifs ».
+                    </td>
+                  </tr>
+                ) : (
+                  foundationHealth.portals
+                    .slice()
+                    .sort((a, b) => {
+                      // Problems first (unreachable, no_calls), then by active count desc
+                      const rank = (h: FoundationPortalHealth) =>
+                        h === "unreachable"
+                          ? 0
+                          : h === "no_calls"
+                            ? 1
+                            : h === "unknown"
+                              ? 2
+                              : 3;
+                      const d = rank(a.health) - rank(b.health);
+                      return d !== 0 ? d : b.activeCalls - a.activeCalls;
+                    })
+                    .slice(0, 40)
+                    .map((p) => (
+                      <tr key={p.funder} className="border-t border-border">
+                        <td className="px-3 py-2">
+                          <a
+                            href={p.portalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-bold underline"
+                          >
+                            {p.funder}
+                          </a>
+                          {p.lastError && (
+                            <p className="text-xs text-red-600 mt-0.5 truncate max-w-sm">
+                              ⚠ {p.lastError}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge
+                            variant={
+                              p.health === "healthy"
+                                ? "green"
+                                : p.health === "no_calls"
+                                  ? "yellow"
+                                  : p.health === "unreachable"
+                                    ? "pink"
+                                    : "secondary"
+                            }
+                          >
+                            {p.health === "healthy"
+                              ? "OK"
+                              : p.health === "no_calls"
+                                ? "0 AAP"
+                                : p.health === "unreachable"
+                                  ? "KO"
+                                  : "?"}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono">
+                          {p.activeCalls}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono">
+                          {p.events30d?.opened ?? 0}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono">
+                          {(p.events30d?.closed ?? 0) +
+                            (p.events30d?.disappeared ?? 0)}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {p.lastCrawledAt
+                            ? new Date(p.lastCrawledAt).toLocaleString(
+                                "fr-FR",
+                                {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )
+                            : "jamais"}
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Lifecycle event feed */}
+          {foundationHealth.recentEvents.length > 0 && (
+            <div className="rounded-2xl border-2 border-border bg-card shadow-[4px_4px_0px_0px_#1a1a1a] p-4 mb-8">
+              <h3 className="text-sm font-black uppercase tracking-wider mb-3">
+                Flux récent des événements
+              </h3>
+              <div className="space-y-2">
+                {foundationHealth.recentEvents.slice(0, 15).map((e) => {
+                  const color = {
+                    opened: "bg-[#c8f76f]",
+                    reopened: "bg-[#c8f76f]",
+                    closed: "bg-[#ffa3d1]",
+                    disappeared: "bg-orange-300",
+                    closing_soon: "bg-[#ffe066]",
+                    deadline_changed: "bg-blue-200",
+                    still_open: "bg-gray-200",
+                  }[e.eventType];
+                  const label = {
+                    opened: "🆕 Ouvert",
+                    reopened: "↩️ Réouvert",
+                    closed: "✅ Clôturé",
+                    disappeared: "👻 Disparu",
+                    closing_soon: "⏰ Clôture proche",
+                    deadline_changed: "📆 Deadline modifiée",
+                    still_open: "✓ Toujours ouvert",
+                  }[e.eventType];
+                  return (
+                    <div
+                      key={e.id}
+                      className="flex items-start gap-3 text-sm border-b border-border/50 pb-2 last:border-0"
+                    >
+                      <Badge className={color}>{label}</Badge>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold truncate">
+                          {e.grantTitle ?? "(grant supprimé)"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {e.funder}
+                          {e.notes ? ` · ${e.notes}` : ""}
+                        </p>
+                      </div>
+                      <span className="text-xs text-muted-foreground font-mono shrink-0">
+                        {new Date(e.detectedAt).toLocaleString("fr-FR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Recent runs */}
       {health?.recentRuns && health.recentRuns.length > 0 && (

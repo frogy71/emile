@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ArrowLeft, ArrowRight, Target, Users, BarChart3, Lightbulb, CheckCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Target, Users, BarChart3, Lightbulb, CheckCircle, Loader2, Sparkles, Wand2 } from "lucide-react";
 import Link from "next/link";
 
 const STEPS = [
@@ -68,11 +68,37 @@ interface FormData {
   sustainability: string;
 }
 
+type Suggestion = Partial<{
+  name: string;
+  summary: string;
+  problem: string;
+  themes: string[];
+  geography: string[];
+  budget: number | null;
+  duration_months: number | null;
+  general_objective: string;
+  specific_objectives: string[];
+  beneficiaries_direct: string;
+  beneficiaries_indirect: string;
+  beneficiaries_count: number | null;
+  activities: string[];
+  methodology: string;
+  partners: string;
+  expected_results: { result?: string; indicator?: string }[];
+  sustainability: string;
+}>;
+
 export default function NewProjectPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Smart-fill state — the "describe your project in a paragraph" flow.
+  const [smartDescription, setSmartDescription] = useState("");
+  const [smartLoading, setSmartLoading] = useState(false);
+  const [smartError, setSmartError] = useState<string | null>(null);
+  const [smartFilled, setSmartFilled] = useState(false);
 
   const [form, setForm] = useState<FormData>({
     name: "",
@@ -150,6 +176,90 @@ export default function NewProjectPage() {
       updated[index] = { ...updated[index], [field]: value };
       return { ...prev, expected_results: updated };
     });
+  };
+
+  // --- Smart-fill ---
+
+  const applySuggestion = (s: Suggestion) => {
+    setForm((prev) => {
+      const pad = (arr: string[] | undefined, len: number) => {
+        const out = Array.isArray(arr) ? [...arr] : [];
+        while (out.length < len) out.push("");
+        return out.slice(0, Math.max(len, out.length));
+      };
+      const padResults = (
+        arr: { result?: string; indicator?: string }[] | undefined,
+        len: number
+      ) => {
+        const out = Array.isArray(arr)
+          ? arr.map((r) => ({
+              result: r.result || "",
+              indicator: r.indicator || "",
+            }))
+          : [];
+        while (out.length < len) out.push({ result: "", indicator: "" });
+        return out.slice(0, Math.max(len, out.length));
+      };
+      // Split proposed themes/geography into known-options vs custom so the
+      // toggle buttons light up correctly for values in the preset list.
+      const presetThemes = THEMATIC_OPTIONS.map((t) => t.label);
+      const proposedThemes = Array.isArray(s.themes) ? s.themes : [];
+      const matchedThemes = proposedThemes.filter((t) => presetThemes.includes(t));
+      const customTheme = proposedThemes.find((t) => !presetThemes.includes(t)) || "";
+
+      const proposedGeo = Array.isArray(s.geography) ? s.geography : [];
+      const matchedGeo = proposedGeo.filter((g) => GEO_OPTIONS.includes(g));
+      const customGeo = proposedGeo.find((g) => !GEO_OPTIONS.includes(g)) || "";
+
+      return {
+        ...prev,
+        name: s.name || prev.name,
+        summary: s.summary || prev.summary,
+        problem: s.problem || prev.problem,
+        themes: matchedThemes.length ? matchedThemes : prev.themes,
+        customTheme: customTheme || prev.customTheme,
+        geography: matchedGeo.length ? matchedGeo : prev.geography,
+        customGeo: customGeo || prev.customGeo,
+        budget: s.budget != null ? String(s.budget) : prev.budget,
+        duration_months:
+          s.duration_months != null ? String(s.duration_months) : prev.duration_months,
+        general_objective: s.general_objective || prev.general_objective,
+        specific_objectives: pad(s.specific_objectives, 3),
+        beneficiaries_direct: s.beneficiaries_direct || prev.beneficiaries_direct,
+        beneficiaries_indirect:
+          s.beneficiaries_indirect || prev.beneficiaries_indirect,
+        beneficiaries_count:
+          s.beneficiaries_count != null
+            ? String(s.beneficiaries_count)
+            : prev.beneficiaries_count,
+        activities: pad(s.activities, 4),
+        methodology: s.methodology || prev.methodology,
+        partners: s.partners || prev.partners,
+        expected_results: padResults(s.expected_results, 3),
+        sustainability: s.sustainability || prev.sustainability,
+      };
+    });
+  };
+
+  const handleSmartFill = async () => {
+    setSmartLoading(true);
+    setSmartError(null);
+    setSmartFilled(false);
+    try {
+      const res = await fetch("/api/projects/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: smartDescription }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur");
+      applySuggestion(data.suggestion as Suggestion);
+      setSmartFilled(true);
+    } catch (e) {
+      setSmartError(e instanceof Error ? e.message : "Erreur inconnue");
+    } finally {
+      setSmartLoading(false);
+    }
   };
 
   // --- Submit ---
@@ -247,6 +357,69 @@ export default function NewProjectPage() {
         <div className="mb-6 rounded-xl border-2 border-red-400 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
           {error}
         </div>
+      )}
+
+      {/* Smart-fill — paste a paragraph, let Claude pre-fill the whole form.
+          Most porteurs already have 2-3 paragraphs about their project in an
+          email or grant application draft; this saves 10 minutes of typing. */}
+      {step === 1 && (
+        <Card className="mb-6 border-[#d4b5ff] bg-[#f5edff]">
+          <CardContent className="p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-[#d4b5ff] shadow-[3px_3px_0px_0px_#1a1a1a]">
+                <Wand2 className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-black">
+                  Décris ton projet en quelques phrases, on remplit le reste
+                </h3>
+                <p className="text-xs font-medium text-muted-foreground mt-0.5">
+                  Colle un paragraphe ou un pitch — notre IA le transforme en
+                  cadre logique. Tu pourras tout ajuster ensuite.
+                </p>
+                <textarea
+                  className="mt-3 flex min-h-[100px] w-full rounded-xl border-2 border-border bg-background px-4 py-3 text-sm font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  placeholder="Ex: Nous voulons lancer un programme d'accompagnement pour 200 jeunes de quartiers prioritaires en Île-de-France. L'idée est de combiner du mentorat, des ateliers numériques et des stages en entreprise, sur 18 mois, avec un budget autour de 120K€..."
+                  value={smartDescription}
+                  onChange={(e) => setSmartDescription(e.target.value)}
+                  spellCheck
+                  lang="fr"
+                  disabled={smartLoading}
+                />
+                <div className="mt-3 flex items-center gap-3 flex-wrap">
+                  <Button
+                    variant="accent"
+                    onClick={handleSmartFill}
+                    disabled={smartLoading || smartDescription.trim().length < 30}
+                  >
+                    {smartLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Analyse en cours...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" />
+                        {smartFilled ? "Régénérer" : "Remplir avec l'IA"}
+                      </>
+                    )}
+                  </Button>
+                  {smartFilled && !smartError && (
+                    <span className="text-xs font-bold text-green-700 flex items-center gap-1">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      Formulaire pré-rempli — vérifie et ajuste ci-dessous
+                    </span>
+                  )}
+                  {smartError && (
+                    <span className="text-xs font-bold text-red-700">
+                      {smartError}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Step 1: Context */}

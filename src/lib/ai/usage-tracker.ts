@@ -21,7 +21,7 @@ function getSupabase() {
 export async function logAiUsage(params: {
   userId?: string;
   orgId?: string;
-  action: "scoring" | "proposal";
+  action: "scoring" | "proposal" | "project_suggest";
   model: string;
   inputTokens: number;
   outputTokens: number;

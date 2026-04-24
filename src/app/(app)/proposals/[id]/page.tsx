@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { notFound, redirect } from "next/navigation";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ProposalEditor } from "@/components/proposal-editor";
 import {
   ArrowLeft,
   Calendar,
@@ -176,47 +176,16 @@ export default async function ProposalDetailPage({
         </div>
       </div>
 
-      {/* Sections */}
-      {sections.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-sm font-medium text-muted-foreground">
-              Aucun contenu structuré dans cette proposition.
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Téléchargez le .docx pour voir le document complet.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {sections.map((section, i) => (
-            <Card key={i}>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-border bg-[#d4b5ff] text-sm font-black shadow-[2px_2px_0px_0px_#1a1a1a]">
-                    {i + 1}
-                  </span>
-                  <h2 className="text-lg font-black">{section.title}</h2>
-                </div>
-                <div className="whitespace-pre-wrap text-sm font-medium leading-relaxed text-foreground">
-                  {section.content}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      {/* Sections — inline editing happens inside the client component */}
+      <ProposalEditor proposalId={proposal.id} initialSections={sections} />
 
       {/* Bottom CTA */}
       <div className="mt-10 rounded-2xl border-2 border-border bg-[#a3d5ff] p-6 shadow-[4px_4px_0px_0px_#1a1a1a] flex items-center justify-between gap-4">
         <div>
-          <h3 className="text-lg font-black">
-            Besoin de retoucher ?
-          </h3>
+          <h3 className="text-lg font-black">Prêt à envoyer ?</h3>
           <p className="text-sm font-medium text-muted-foreground">
-            Téléchargez le .docx et finalisez la rédaction dans votre éditeur
-            préféré.
+            Exporte en .docx pour la mise en page finale et la soumission au
+            bailleur.
           </p>
         </div>
         <a href={`/api/proposals/export?id=${proposal.id}`} download>

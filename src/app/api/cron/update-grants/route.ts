@@ -86,4 +86,4 @@ async function handle(request: Request) {
 
 export const GET = handle;
 export const POST = handle;
-export const maxDuration = 800; // Vercel Pro: 15min, free: 60s
+export const maxDuration = 300; // Hobby plan max — daily ingest (fast sources)

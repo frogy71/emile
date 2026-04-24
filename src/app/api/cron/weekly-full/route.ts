@@ -80,4 +80,4 @@ async function handle(request: Request) {
 
 export const GET = handle;
 export const POST = handle;
-export const maxDuration = 800;
+export const maxDuration = 300; // Hobby plan max — weekly full ingest

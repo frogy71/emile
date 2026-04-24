@@ -32,7 +32,7 @@ function getSupabase() {
   );
 }
 
-export const maxDuration = 800;
+export const maxDuration = 300; // Hobby plan max — admin-triggered ingest
 
 export async function POST(request: Request) {
   const supabase = getSupabase();

@@ -9,7 +9,9 @@ import {
   ChevronDown,
   ChevronUp,
   Euro,
+  Phone,
   Sparkles,
+  Star,
   Target,
 } from "lucide-react";
 
@@ -87,6 +89,27 @@ function formatEur(n: number | null | undefined): string | null {
   return `${n} €`;
 }
 
+/**
+ * Private foundations respond to direct outreach much more than public calls
+ * — their programs are discretionary, the decision is human, and a well-told
+ * story lands. So when score ≥ 95 AND source is a private foundation, we
+ * surface a "contacte-les directement" CTA alongside the usual generate
+ * button.
+ */
+const PRIVATE_FOUNDATION_SOURCES = new Set([
+  "Fondations françaises",
+  "Fondation de France",
+  "data.gouv.fr — FRUP",
+  "data.gouv.fr — Fondations entreprises",
+]);
+
+function isPrivateFoundation(sourceName: string | null | undefined): boolean {
+  if (!sourceName) return false;
+  if (PRIVATE_FOUNDATION_SOURCES.has(sourceName)) return true;
+  // Heuristic fallback — anything explicitly labelled a fondation
+  return /fondation/i.test(sourceName);
+}
+
 // ─── Podium card (gold/silver/bronze) ────────────────────────────
 
 function PodiumCard({
@@ -115,6 +138,8 @@ function PodiumCard({
   const difficulty = difficultyBadge(expl.difficulty, expl.difficultyLabel);
   const days = daysLeft(grant.deadline);
   const amount = formatEur(grant.max_amount_eur);
+  const isExceptional = match.score >= 95;
+  const isFoundation = isPrivateFoundation(grant.source_name);
 
   return (
     <div
@@ -208,6 +233,20 @@ function PodiumCard({
               )}
             </div>
 
+            {isExceptional && (
+              <div className="mt-4 rounded-xl border-2 border-border bg-background/90 p-3 shadow-[2px_2px_0px_0px_#1a1a1a]">
+                <div className="flex items-start gap-2">
+                  <Star className="h-4 w-4 mt-0.5 shrink-0 fill-[#ffe066] text-foreground" />
+                  <div className="text-xs font-bold leading-snug">
+                    <span className="font-black">Match exceptionnel.</span>{" "}
+                    {isFoundation
+                      ? "Contacte la fondation en direct avant même de soumettre — présente le projet, demande un rendez-vous. C'est là que ça se joue."
+                      : "Priorise ce dossier cette semaine — un score ≥ 95 est rare."}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2 mt-4">
               <Link href={`/grants/${grant.id}?project_id=${projectId}`}>
                 <Button variant="default" size="sm">
@@ -220,6 +259,18 @@ function PodiumCard({
                   En savoir plus sur la subvention
                 </Button>
               </Link>
+              {isExceptional && isFoundation && grant.source_url && (
+                <a
+                  href={grant.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="accent" size="sm">
+                    <Phone className="h-4 w-4" />
+                    Contacter la fondation
+                  </Button>
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -245,16 +296,26 @@ function TopCard({
   const difficulty = difficultyBadge(expl.difficulty, expl.difficultyLabel);
   const days = daysLeft(grant.deadline);
   const amount = formatEur(grant.max_amount_eur);
+  const isExceptional = match.score >= 95;
+  const isFoundation = isPrivateFoundation(grant.source_name);
 
   return (
-    <div className="rounded-2xl border-2 border-border bg-card shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px]">
+    <div
+      className={`rounded-2xl border-2 border-border shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px] ${
+        isExceptional ? "bg-[#fff8e1]" : "bg-card"
+      }`}
+    >
       <div className="p-5">
         <div className="flex items-start gap-4">
           <div className="shrink-0 text-center">
             <div className="text-[11px] font-black text-muted-foreground">
               #{rank}
             </div>
-            <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-xl border-2 border-border bg-[#c8f76f] text-lg font-black shadow-[2px_2px_0px_0px_#1a1a1a]">
+            <div
+              className={`mt-1 flex h-12 w-12 items-center justify-center rounded-xl border-2 border-border text-lg font-black shadow-[2px_2px_0px_0px_#1a1a1a] ${
+                isExceptional ? "bg-[#ffe066]" : "bg-[#c8f76f]"
+              }`}
+            >
               {match.score}
             </div>
           </div>
@@ -317,8 +378,31 @@ function TopCard({
                 En savoir plus
               </Button>
             </Link>
+            {isExceptional && isFoundation && grant.source_url && (
+              <a
+                href={grant.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="default" size="sm" className="w-full">
+                  <Phone className="h-3.5 w-3.5" />
+                  Contacter
+                </Button>
+              </a>
+            )}
           </div>
         </div>
+        {isExceptional && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border-2 border-border bg-background p-2">
+            <Star className="h-4 w-4 shrink-0 mt-0.5 fill-[#ffe066] text-foreground" />
+            <p className="text-xs font-bold leading-snug">
+              Match exceptionnel —{" "}
+              {isFoundation
+                ? "contacte la fondation en direct."
+                : "dossier à prioriser."}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -387,6 +471,13 @@ export function ProjectMatches({
   const topTier = ranked.slice(3, 7);
   const rest = ranked.slice(7);
 
+  // Exceptional private-foundation matches (score ≥ 95). These get a
+  // dedicated "à contacter en direct" banner at the top because direct
+  // outreach is the single biggest unlock with private foundations.
+  const exceptionalFoundations = ranked.filter(
+    (m) => m.score >= 95 && isPrivateFoundation(m.grants?.source_name)
+  );
+
   if (ranked.length === 0) {
     return (
       <div className="rounded-2xl border-2 border-border bg-card p-8 text-center shadow-[4px_4px_0px_0px_#1a1a1a]">
@@ -400,6 +491,60 @@ export function ProjectMatches({
 
   return (
     <div className="space-y-8">
+      {/* Exceptional-foundations banner */}
+      {exceptionalFoundations.length > 0 && (
+        <div className="rounded-2xl border-2 border-border bg-[#ffe066] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-background shadow-[2px_2px_0px_0px_#1a1a1a] shrink-0">
+              <Star className="h-5 w-5 fill-[#ffe066] text-foreground" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-black">
+                {exceptionalFoundations.length} fondation
+                {exceptionalFoundations.length > 1 ? "s" : ""} à contacter en
+                direct (score ≥ 95)
+              </h3>
+              <p className="text-xs font-medium text-foreground/80 mt-1">
+                Les fondations privées décident au cas par cas. Envoie un email
+                ou demande un rendez-vous <strong>avant</strong> de soumettre
+                un dossier — ça triple tes chances.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {exceptionalFoundations.slice(0, 6).map((m) => {
+                  const funder = m.grants?.funder || m.grants?.title || "—";
+                  return m.grants?.source_url ? (
+                    <a
+                      key={m.id}
+                      href={m.grants.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-lg border-2 border-border bg-background px-2.5 py-1 text-xs font-bold shadow-[2px_2px_0px_0px_#1a1a1a] hover:translate-y-[-1px] transition-transform"
+                    >
+                      <Phone className="h-3 w-3" />
+                      {funder}
+                      <span className="ml-1 rounded bg-[#c8f76f] px-1 text-[10px]">
+                        {m.score}
+                      </span>
+                    </a>
+                  ) : (
+                    <Link
+                      key={m.id}
+                      href={`/grants/${m.grants?.id}?project_id=${projectId}`}
+                      className="inline-flex items-center gap-1 rounded-lg border-2 border-border bg-background px-2.5 py-1 text-xs font-bold shadow-[2px_2px_0px_0px_#1a1a1a] hover:translate-y-[-1px] transition-transform"
+                    >
+                      {funder}
+                      <span className="ml-1 rounded bg-[#c8f76f] px-1 text-[10px]">
+                        {m.score}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PODIUM */}
       {podium.length > 0 && (
         <div>

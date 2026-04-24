@@ -289,7 +289,7 @@ export default async function GrantDetailPage({
               >
                 <Button variant="outline">
                   <ExternalLink className="h-4 w-4" />
-                  En savoir plus sur la subvention
+                  Site officiel du bailleur
                 </Button>
               </a>
             )}

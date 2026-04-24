@@ -64,15 +64,19 @@ export default async function ProjectDetailPage({
       )
       .eq("project_id", id)
       .order("score", { ascending: false })
-      .limit(50),
+      // No hard cap: show every scored grant so users see all ≥ 80 matches
+      // and the long tail. The UI (ProjectMatches) collapses #8+ behind a
+      // toggle, so rendering hundreds doesn't hurt.
+      .limit(1000),
   ]);
 
   const proposalList = proposals || [];
   const matchList = matchScores || [];
 
-  // Total money theoretically available = sum of max_amount_eur across the top
-  // matches we fetched (limit 50). It's not a guarantee, but it's a motivating
-  // "potential" number that shows the user how much headroom this project has.
+  // Total money theoretically available = sum of max_amount_eur across every
+  // match. Not a guarantee — some of these are mutually exclusive — but a
+  // motivating "potential" number that shows the user how much headroom the
+  // project has across all scored opportunities.
   const totalAvailableEur = matchList.reduce((sum, m) => {
     const amt = m.grants?.max_amount_eur;
     return sum + (amt ? Number(amt) : 0);

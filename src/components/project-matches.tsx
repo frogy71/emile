@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronUp,
   Euro,
-  ExternalLink,
   Sparkles,
   Target,
 } from "lucide-react";
@@ -216,18 +215,11 @@ function PodiumCard({
                   Générer une proposition
                 </Button>
               </Link>
-              {grant.source_url && (
-                <a
-                  href={grant.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="outline" size="sm">
-                    <ExternalLink className="h-4 w-4" />
-                    Voir chez le bailleur
-                  </Button>
-                </a>
-              )}
+              <Link href={`/grants/${grant.id}?project_id=${projectId}`}>
+                <Button variant="outline" size="sm">
+                  En savoir plus sur la subvention
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -320,18 +312,11 @@ function TopCard({
                 Proposition
               </Button>
             </Link>
-            {grant.source_url && (
-              <a
-                href={grant.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="outline" size="sm" className="w-full">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Appel
-                </Button>
-              </a>
-            )}
+            <Link href={`/grants/${grant.id}?project_id=${projectId}`}>
+              <Button variant="outline" size="sm" className="w-full">
+                En savoir plus
+              </Button>
+            </Link>
           </div>
         </div>
       </div>

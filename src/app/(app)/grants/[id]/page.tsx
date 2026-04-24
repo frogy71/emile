@@ -289,7 +289,7 @@ export default async function GrantDetailPage({
               >
                 <Button variant="outline">
                   <ExternalLink className="h-4 w-4" />
-                  Voir l&apos;appel
+                  En savoir plus sur la subvention
                 </Button>
               </a>
             )}

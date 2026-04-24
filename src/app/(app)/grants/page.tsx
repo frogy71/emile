@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,6 @@ import {
   Calendar,
   Euro,
   Clock,
-  ExternalLink,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -385,9 +385,14 @@ export default function GrantsPage() {
                     </div>
 
                     {/* Title + funder */}
-                    <h3 className="text-lg font-black text-foreground leading-tight">
-                      {grant.title}
-                    </h3>
+                    <Link
+                      href={`/grants/${grant.id}`}
+                      className="block group"
+                    >
+                      <h3 className="text-lg font-black text-foreground leading-tight group-hover:underline decoration-2 underline-offset-2">
+                        {grant.title}
+                      </h3>
+                    </Link>
                     <p className="text-sm font-semibold text-muted-foreground mt-0.5">
                       {grant.funder}
                     </p>
@@ -431,19 +436,11 @@ export default function GrantsPage() {
                   </div>
 
                   {/* Action */}
-                  {grant.source_url && (
-                    <a
-                      href={grant.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0"
-                    >
-                      <Button variant="outline" size="sm">
-                        <ExternalLink className="h-4 w-4" />
-                        Voir
-                      </Button>
-                    </a>
-                  )}
+                  <Link href={`/grants/${grant.id}`} className="shrink-0">
+                    <Button variant="outline" size="sm">
+                      En savoir plus
+                    </Button>
+                  </Link>
                 </div>
               </div>
             );

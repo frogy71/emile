@@ -14,7 +14,6 @@ import {
   Globe,
   MapPin,
   Sparkles,
-  Target,
   TrendingUp,
   Users,
   Activity,
@@ -78,6 +77,20 @@ export default async function ProjectDetailPage({
 
   const proposalList = proposals || [];
   const matchList = matchScores || [];
+
+  // Total money theoretically available = sum of max_amount_eur across the top
+  // matches we fetched (limit 50). It's not a guarantee, but it's a motivating
+  // "potential" number that shows the user how much headroom this project has.
+  const totalAvailableEur = matchList.reduce((sum, m) => {
+    const amt = m.grants?.max_amount_eur;
+    return sum + (amt ? Number(amt) : 0);
+  }, 0);
+
+  const formatBigEur = (n: number) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(".0", "")} M€`;
+    if (n >= 1_000) return `${Math.round(n / 1_000)}k€`;
+    return `${n} €`;
+  };
 
   return (
     <div>
@@ -155,10 +168,16 @@ export default async function ProjectDetailPage({
 
         <div className="rounded-2xl border-2 border-border bg-[#d4b5ff] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
           <div className="flex items-center gap-3">
-            <Target className="h-6 w-6" />
+            <TrendingUp className="h-6 w-6" />
             <div>
-              <p className="text-2xl font-black">{matchList.length}</p>
-              <p className="text-xs font-bold">Matches trouvés</p>
+              <p className="text-2xl font-black">
+                {totalAvailableEur > 0 ? formatBigEur(totalAvailableEur) : "—"}
+              </p>
+              <p className="text-xs font-bold">
+                {totalAvailableEur > 0
+                  ? `Disponibles · ${matchList.length} match${matchList.length > 1 ? "es" : ""}`
+                  : "Argent disponible"}
+              </p>
             </div>
           </div>
         </div>

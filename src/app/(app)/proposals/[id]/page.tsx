@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProposalEditor } from "@/components/proposal-editor";
+import { ProposalEnrich } from "@/components/proposal-enrich";
 import {
   ArrowLeft,
   Calendar,
@@ -175,6 +176,11 @@ export default async function ProposalDetailPage({
           </p>
         </div>
       </div>
+
+      {/* Post-draft Q&A — invite users to add storytelling/missing context
+          before they even look at the editor. Collapsible so it doesn't
+          overwhelm the page once the draft has already been enriched. */}
+      <ProposalEnrich proposalId={proposal.id} />
 
       {/* Sections — inline editing happens inside the client component */}
       <ProposalEditor proposalId={proposal.id} initialSections={sections} />

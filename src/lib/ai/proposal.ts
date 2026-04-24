@@ -270,6 +270,201 @@ Style: professionnel, orienté bailleur, spécifique. N'invente JAMAIS de donné
   return prompt;
 }
 
+export interface EnrichAnswer {
+  question: string;
+  answer: string;
+}
+
+export interface EnrichInput {
+  sections: { title: string; content: string }[];
+  answers: EnrichAnswer[];
+  organization: ProposalInput["organization"];
+  project?: ProposalInput["project"];
+  grant: ProposalInput["grant"];
+}
+
+/**
+ * Enrich an existing proposal draft with fresh context + storytelling answers
+ * from the user. Preserves the section titles (and their order) but rewrites
+ * the bodies so the new info is folded in where it fits best — a concrete
+ * anecdote belongs in "Contexte", a differentiator belongs in "Partenariats",
+ * etc.
+ *
+ * Returns the updated sections. If the API call fails, returns the original
+ * sections with the user's answers appended as a fallback "Compléments" section
+ * so their work isn't lost.
+ */
+export async function enrichProposal(
+  input: EnrichInput
+): Promise<{ sections: { title: string; content: string }[]; enrichedAt: string; usage?: { input_tokens: number; output_tokens: number } }> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const { sections, answers } = input;
+
+  // Filter out empty answers — users may skip questions
+  const filled = answers.filter((a) => a.answer.trim().length > 0);
+  if (filled.length === 0) {
+    return { sections, enrichedAt: new Date().toISOString() };
+  }
+
+  if (!apiKey) {
+    return {
+      sections: appendFallbackEnrichment(sections, filled),
+      enrichedAt: new Date().toISOString(),
+    };
+  }
+
+  const language = input.grant.language === "en" ? "anglais" : "français";
+  const prompt = buildEnrichPrompt(input, language, filled);
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Claude API error (enrich):", response.status);
+      return {
+        sections: appendFallbackEnrichment(sections, filled),
+        enrichedAt: new Date().toISOString(),
+      };
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || "";
+
+    const usage = data.usage;
+    if (usage) {
+      logAiUsage({
+        action: "enrich",
+        model: "claude-sonnet-4-20250514",
+        inputTokens: usage.input_tokens || 0,
+        outputTokens: usage.output_tokens || 0,
+      });
+    }
+
+    const parsed = parseSections(text);
+
+    // Safety net: if parsing returned fewer sections than we started with
+    // (Claude truncated, mangled the headers, whatever), merge by title so we
+    // never *drop* a section. Sections whose titles appear in the parsed
+    // output get replaced; the rest keep their original content.
+    const merged = sections.map((original) => {
+      const updated = parsed.find(
+        (p) => p.title.trim().toLowerCase() === original.title.trim().toLowerCase()
+      );
+      return updated && updated.content.trim().length > 0 ? updated : original;
+    });
+
+    return {
+      sections: merged,
+      enrichedAt: new Date().toISOString(),
+      usage,
+    };
+  } catch (error) {
+    console.error("Proposal enrichment error:", error);
+    return {
+      sections: appendFallbackEnrichment(sections, filled),
+      enrichedAt: new Date().toISOString(),
+    };
+  }
+}
+
+function buildEnrichPrompt(
+  input: EnrichInput,
+  language: string,
+  answers: EnrichAnswer[]
+): string {
+  const { sections, organization: org, project, grant } = input;
+
+  let prompt = `Tu es un expert en rédaction de propositions de subventions.
+Un premier brouillon a été rédigé pour l'ONG "${org.name}". L'utilisateur vient de fournir des informations supplémentaires (storytelling, données manquantes, contexte).
+Ta mission : RÉÉCRIRE le brouillon en intégrant ces nouvelles infos aux bons endroits, sans rien perdre de substantiel du texte existant.
+
+═══ APPEL À PROPOSITIONS ═══
+Titre: ${grant.title}
+Bailleur: ${grant.funder || "Non spécifié"}`;
+
+  if (grant.thematicAreas?.length) {
+    prompt += `\nThématiques: ${grant.thematicAreas.join(", ")}`;
+  }
+
+  prompt += `
+
+═══ ORGANISATION ═══
+Nom: ${org.name}
+Mission: ${org.mission || "[Non renseignée]"}`;
+
+  if (project) {
+    prompt += `
+Projet: ${project.name}
+Résumé: ${project.summary || "[Non renseigné]"}`;
+  }
+
+  prompt += `
+
+═══ BROUILLON ACTUEL ═══
+${sections.map((s) => `## ${s.title}\n${s.content}`).join("\n\n")}
+
+═══ RÉPONSES DE L'UTILISATEUR (à intégrer) ═══
+${answers.map((a, i) => `Q${i + 1}: ${a.question}\nR${i + 1}: ${a.answer}`).join("\n\n")}
+
+═══ CONSIGNES ═══
+Rédige en ${language}. Pour chaque section du brouillon actuel, republie son titre au format "## [Titre exact]" puis le contenu enrichi.
+
+RÈGLES STRICTES:
+1. Conserve EXACTEMENT les mêmes titres de sections, dans le même ordre (${sections.map((s) => `"${s.title}"`).join(", ")}).
+2. Intègre les réponses utilisateur là où elles sont pertinentes :
+   - anecdotes / histoires concrètes → "Contexte et problématique" ou "Résumé exécutif"
+   - chiffres, données, impact → "Contexte", "Résultats attendus", "Bénéficiaires"
+   - différenciateurs, track record → "Partenariats et capacités organisationnelles"
+   - urgence / timing → "Résumé exécutif" et "Contexte"
+   - durabilité / après-projet → "Durabilité et pérennisation"
+3. Remplace les "[À COMPLÉTER]" par les informations fournies quand c'est possible.
+4. Garde tout ce qui était déjà bien rédigé — tu enrichis, tu ne repars pas de zéro.
+5. N'invente JAMAIS de données chiffrées. Si une info manque encore, laisse "[À COMPLÉTER]".
+6. Adapte le ton au bailleur (${grant.funder || "bailleur"}) : professionnel, orienté impact, spécifique.
+
+Commence directement par "## ${sections[0]?.title || "Résumé exécutif"}" — pas d'introduction méta.`;
+
+  return prompt;
+}
+
+function appendFallbackEnrichment(
+  sections: { title: string; content: string }[],
+  answers: EnrichAnswer[]
+): { title: string; content: string }[] {
+  // If Claude is unavailable, at least preserve the user's input as an
+  // appendix so they don't lose what they typed.
+  const appendix = answers
+    .map((a) => `**${a.question}**\n${a.answer}`)
+    .join("\n\n");
+
+  const existing = sections.findIndex(
+    (s) => s.title.trim().toLowerCase() === "compléments utilisateur"
+  );
+
+  if (existing >= 0) {
+    return sections.map((s, i) =>
+      i === existing ? { ...s, content: `${s.content}\n\n${appendix}` } : s
+    );
+  }
+
+  return [
+    ...sections,
+    { title: "Compléments utilisateur", content: appendix },
+  ];
+}
+
 function parseSections(text: string): { title: string; content: string }[] {
   const sections: { title: string; content: string }[] = [];
   const parts = text.split(/^## /gm).filter(Boolean);

@@ -19,10 +19,15 @@ export default function LandingPage() {
       {/* Nav */}
       <nav className="border-b-2 border-border">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <span className="text-2xl font-black tracking-tight text-foreground">
+          <Link href="/" className="text-2xl font-black tracking-tight text-foreground">
             Emile<span className="text-[#c8f76f] bg-foreground px-2 py-0.5 rounded-lg ml-1 text-lg">.</span>
-          </span>
+          </Link>
           <div className="flex items-center gap-3">
+            <Link href="/pricing" className="hidden sm:inline-block">
+              <Button variant="ghost" size="sm">
+                Tarifs
+              </Button>
+            </Link>
             <Link href="/login">
               <Button variant="ghost" size="sm">
                 Connexion
@@ -57,7 +62,7 @@ export default function LandingPage() {
             <br className="mt-2" />
             Emile surveille, classe et vous aide à décrocher vos financements.
           </p>
-          <div className="mt-10 flex items-center gap-4">
+          <div className="mt-10 flex flex-wrap items-center gap-4">
             <Link href="/signup">
               <Button variant="default" size="lg">
                 Commencer gratuitement
@@ -70,6 +75,9 @@ export default function LandingPage() {
               </Button>
             </Link>
           </div>
+          <p className="mt-4 text-sm font-bold text-muted-foreground">
+            Gratuit · aucune carte · ~2 800 appels à projets FR + UE indexés
+          </p>
         </div>
       </section>
 
@@ -190,80 +198,99 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing */}
+      {/* Pricing teaser */}
       <section id="pricing" className="border-t-2 border-border py-20">
         <div className="mx-auto max-w-6xl px-6">
           <h2 className="text-4xl font-black text-foreground text-center">
-            Un seul plan. Tout inclus.
+            Commencez gratuitement.
           </h2>
-          <p className="mt-3 text-center text-muted-foreground font-medium">
-            Une subvention décrochée rembourse des années d&apos;abonnement.
+          <p className="mt-3 text-center text-muted-foreground font-medium max-w-2xl mx-auto">
+            Matching IA illimité et 1 brouillon de proposition gratuit —
+            suffisant pour tester Emile de bout en bout avant de passer Pro.
           </p>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             Prix HT — TVA non applicable pour les associations (article 261-7-1° du CGI)
           </p>
 
           <div className="mt-12 grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
-            {/* Annual — featured */}
-            <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-8 shadow-[6px_6px_0px_0px_#1a1a1a] relative">
-              <Badge variant="default" className="absolute -top-3 right-4 bg-foreground text-background px-3 py-1 text-xs font-black">
-                -25% 🎉
-              </Badge>
-              <h3 className="text-xl font-black">Annuel</h3>
+            {/* Free */}
+            <div className="rounded-2xl border-2 border-border bg-card p-8 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-black">Découverte</h3>
+                <Badge variant="secondary">Gratuit</Badge>
+              </div>
               <p className="mt-4">
-                <span className="text-5xl font-black">59€</span>
-                <span className="font-bold">/mois HT</span>
+                <span className="text-5xl font-black">0€</span>
+                <span className="text-muted-foreground font-bold"> / pour toujours</span>
               </p>
-              <p className="mt-1 text-sm font-bold">
-                Facturé 708€/an — Économisez 240€ vs mensuel
+              <p className="mt-2 text-sm text-muted-foreground font-medium">
+                Matching illimité + 1 brouillon IA. Aucune carte requise.
               </p>
               <Link href="/signup">
-                <Button variant="default" size="lg" className="mt-6 w-full">
-                  Commencer — meilleur deal
+                <Button variant="outline" size="lg" className="mt-6 w-full">
+                  Créer mon compte
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
             </div>
 
-            {/* Monthly */}
-            <div className="rounded-2xl border-2 border-border bg-card p-8 shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <h3 className="text-xl font-black">Mensuel</h3>
+            {/* Pro */}
+            <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-8 shadow-[6px_6px_0px_0px_#1a1a1a] relative">
+              <Badge variant="default" className="absolute -top-3 right-4 bg-foreground text-background px-3 py-1 text-xs font-black">
+                Le + populaire
+              </Badge>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-black">Pro</h3>
+                <Badge variant="green">Illimité</Badge>
+              </div>
               <p className="mt-4">
                 <span className="text-5xl font-black">79€</span>
-                <span className="text-muted-foreground font-bold">/mois HT</span>
+                <span className="font-bold">/mois HT</span>
               </p>
-              <p className="mt-2 text-sm text-muted-foreground font-medium">
-                Sans engagement. Annulation à tout moment.
+              <p className="mt-1 text-sm font-bold">
+                ou <span>59€/mois</span> en annuel (708€/an)
               </p>
-              <Link href="/signup">
-                <Button variant="outline" size="lg" className="mt-6 w-full">
-                  Commencer
-                  <ArrowRight className="h-4 w-4" />
+              <Link href="/signup?plan=monthly">
+                <Button variant="default" size="lg" className="mt-6 w-full">
+                  <Sparkles className="h-4 w-4" />
+                  Démarrer l&apos;essai Pro
                 </Button>
               </Link>
+              <p className="mt-2 text-center text-[11px] font-bold text-foreground/70">
+                Essai sans carte · annulable à tout moment
+              </p>
             </div>
           </div>
 
           {/* Features list */}
           <div className="mt-10 max-w-3xl mx-auto">
             <div className="rounded-2xl border-2 border-border bg-card p-6 shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <p className="font-black text-center mb-4">Tout inclus dans les deux plans :</p>
+              <p className="font-black text-center mb-4">Inclus dans les deux plans :</p>
               <div className="grid gap-2 md:grid-cols-2">
                 {[
-                  "2 000+ subventions FR + UE",
+                  "~2 800 subventions FR + UE",
                   "Matching IA illimité (GrantScore)",
                   "Alertes email personnalisées",
-                  "Génération de proposals IA",
                   "Projets illimités",
                   "Filtres par type, territoire, thématique",
                   "Score de difficulté par grant",
                   "Mise à jour quotidienne des sources",
+                  "Export .docx + édition en ligne",
                 ].map((f) => (
                   <span key={f} className="flex items-center gap-2 text-sm font-semibold">
                     <Check className="h-4 w-4 text-[#c8f76f] shrink-0" />
                     {f}
                   </span>
                 ))}
+              </div>
+              <div className="mt-6 text-center">
+                <Link
+                  href="/pricing"
+                  className="inline-flex items-center gap-1 text-sm font-bold text-foreground/80 hover:text-foreground underline underline-offset-4"
+                >
+                  Voir tous les détails et la FAQ
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
               </div>
             </div>
           </div>
@@ -272,8 +299,15 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t-2 border-border py-8">
-        <div className="mx-auto max-w-6xl px-6 text-center text-sm font-bold text-muted-foreground">
-          &copy; {new Date().getFullYear()} Emile. Tous droits réservés.
+        <div className="mx-auto max-w-6xl px-6 flex flex-wrap items-center justify-between gap-4 text-sm font-medium text-muted-foreground">
+          <p>&copy; {new Date().getFullYear()} Emile — Copilote financement ONG.</p>
+          <div className="flex items-center gap-4">
+            <Link href="/pricing" className="hover:text-foreground">Tarifs</Link>
+            <Link href="/login" className="hover:text-foreground">Connexion</Link>
+            <a href="mailto:francois@tresorier.co" className="hover:text-foreground">
+              Contact
+            </a>
+          </div>
         </div>
       </footer>
     </div>

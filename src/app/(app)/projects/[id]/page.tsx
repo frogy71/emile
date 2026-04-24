@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Calendar,
   Clock,
+  Download,
   Euro,
   FileText,
   Globe,
@@ -469,13 +470,22 @@ export default async function ProjectDetailPage({
                       )}
                     </div>
                   </div>
-                  <div className="shrink-0 ml-4">
+                  <div className="shrink-0 ml-4 flex flex-col gap-2">
                     <Link href={`/proposals/${proposal.id}`}>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" className="w-full">
                         Voir le brouillon
                         <ArrowRight className="h-4 w-4" />
                       </Button>
                     </Link>
+                    <a
+                      href={`/api/proposals/export?id=${proposal.id}`}
+                      download
+                    >
+                      <Button variant="accent" size="sm" className="w-full">
+                        <Download className="h-4 w-4" />
+                        .docx
+                      </Button>
+                    </a>
                   </div>
                 </div>
               </div>

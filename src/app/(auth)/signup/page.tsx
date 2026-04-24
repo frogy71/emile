@@ -14,7 +14,27 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
   const router = useRouter();
+
+  async function handleResendConfirmation() {
+    if (!email) return;
+    setResending(true);
+    setResent(false);
+    const supabase = createClient();
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    setResending(false);
+    if (!error) {
+      setResent(true);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -146,7 +166,26 @@ export default function SignupPage() {
               <p className="text-sm text-destructive">{error}</p>
             )}
             {success && (
-              <p className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">{success}</p>
+              <div className="text-sm text-green-700 bg-green-50 border-2 border-green-200 p-3 rounded-lg space-y-2">
+                <p className="font-medium">{success}</p>
+                <p className="text-xs">
+                  Pas reçu ? Vérifie tes spams, ou{" "}
+                  <button
+                    type="button"
+                    onClick={handleResendConfirmation}
+                    disabled={resending}
+                    className="font-bold underline hover:text-green-900 disabled:opacity-60"
+                  >
+                    {resending ? "envoi…" : "renvoie l'email"}
+                  </button>
+                  .
+                </p>
+                {resent && (
+                  <p className="text-xs font-bold">
+                    ✓ Email renvoyé. Il peut mettre 1-2 minutes à arriver.
+                  </p>
+                )}
+              </div>
             )}
             <Button type="submit" className="w-full" disabled={loading || !!success}>
               {loading ? "Création..." : "Créer mon compte"}

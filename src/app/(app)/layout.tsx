@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { HelpAssistant } from "@/components/help-assistant";
 import {
   LayoutDashboard,
   FolderOpen,
@@ -194,6 +195,9 @@ export default async function AppLayout({
       <main className="ml-72 flex-1">
         <div className="mx-auto max-w-5xl px-8 py-8">{children}</div>
       </main>
+
+      {/* Floating contextual help — renders on every authenticated page */}
+      <HelpAssistant />
     </div>
   );
 }

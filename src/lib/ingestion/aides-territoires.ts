@@ -13,6 +13,31 @@
 
 const BASE_URL = "https://aides-territoires.beta.gouv.fr/api";
 
+/**
+ * Exchange long-lived X-AUTH-TOKEN for a short-lived JWT (24h).
+ * Since late 2024, Aides-Territoires requires JWT auth on /api/aids/.
+ */
+async function getJwt(): Promise<string> {
+  const authToken = process.env.AIDES_TERRITOIRES_API_TOKEN;
+  if (!authToken) {
+    throw new Error("AIDES_TERRITOIRES_API_TOKEN env var is required");
+  }
+  const res = await fetch(`${BASE_URL}/connexion/`, {
+    method: "POST",
+    headers: { "X-AUTH-TOKEN": authToken },
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Aides-Territoires auth failed: ${res.status} ${res.statusText}`
+    );
+  }
+  const data = await res.json();
+  if (!data.token) {
+    throw new Error("Aides-Territoires did not return a JWT token");
+  }
+  return data.token as string;
+}
+
 export interface AideTerritoireRaw {
   id: number;
   url: string;
@@ -57,14 +82,19 @@ export interface AideTerritoireResponse {
  * Handles pagination automatically.
  */
 export async function fetchAllAidesAssociations(): Promise<AideTerritoireRaw[]> {
+  const jwt = await getJwt();
+  const headers = { Authorization: `Bearer ${jwt}` };
   const allAids: AideTerritoireRaw[] = [];
-  let url: string | null =
-    `${BASE_URL}/aids/?targeted_audiences=association&is_live=true&page_size=50`;
 
-  console.log("[Aides-Territoires] Starting ingestion...");
+  // Fetch ALL live aids (not just associations) to cover ESS, fondations,
+  // collectivités, entreprises sociales, etc. Matching scores later.
+  let url: string | null =
+    `${BASE_URL}/aids/?is_live=true&page_size=100`;
+
+  console.log("[Aides-Territoires] Starting ingestion with JWT...");
 
   while (url) {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
     if (!response.ok) {
       throw new Error(
         `Aides-Territoires API error: ${response.status} ${response.statusText}`
@@ -81,12 +111,12 @@ export async function fetchAllAidesAssociations(): Promise<AideTerritoireRaw[]> 
 
     // Be polite — small delay between requests
     if (url) {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 150));
     }
   }
 
   console.log(
-    `[Aides-Territoires] Done. Total: ${allAids.length} active aids for associations.`
+    `[Aides-Territoires] Done. Total: ${allAids.length} active aids.`
   );
   return allAids;
 }
@@ -117,18 +147,20 @@ export async function fetchAides(params: {
 
   searchParams.set("page_size", String(params.pageSize || 50));
 
+  const jwt = await getJwt();
+  const headers = { Authorization: `Bearer ${jwt}` };
   const allAids: AideTerritoireRaw[] = [];
   let url: string | null = `${BASE_URL}/aids/?${searchParams.toString()}`;
 
   while (url) {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
     if (!response.ok) throw new Error(`API error: ${response.status}`);
 
     const data: AideTerritoireResponse = await response.json();
     allAids.push(...data.results);
     url = data.next;
 
-    if (url) await new Promise((r) => setTimeout(r, 200));
+    if (url) await new Promise((r) => setTimeout(r, 150));
   }
 
   return allAids;

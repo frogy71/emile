@@ -23,6 +23,7 @@ import { fetchEuropeAidCalls, transformEuropeAidToGrant } from "./europeaid";
 import { fetchFRUP, transformFRUPToGrant, fetchFondationsEntreprises, transformFEToGrant } from "./data-gouv";
 import { fetchBpiGrants, transformBpiToGrant } from "./bpifrance";
 import { fetchCuratedFoundations, transformCuratedToGrant } from "./fondations-curated";
+import { fetchFondationDeFrance, transformFDFToGrant } from "./fondation-de-france";
 
 export interface IngestionResult {
   source: string;
@@ -182,6 +183,13 @@ export async function runFullIngestion(): Promise<IngestionReport> {
     return raw.map(transformCuratedToGrant);
   });
   sources.push(curated);
+
+  // 8. Fondation de France — live scraping of active calls
+  const fdf = await ingestSource("Fondation de France (appels actifs)", async () => {
+    const raw = await fetchFondationDeFrance();
+    return raw.map(transformFDFToGrant);
+  });
+  sources.push(fdf);
 
   const completedAt = new Date().toISOString();
 

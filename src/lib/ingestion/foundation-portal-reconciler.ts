@@ -250,7 +250,10 @@ export async function reconcileFoundationPortals(
         funder: snap.funder,
         portal_url: snap.portalUrl,
         last_crawled_at: now.toISOString(),
+        last_success_at: null,
         last_reachable: false,
+        active_calls_count: 0,
+        empty_crawls_in_a_row: null,
         last_error: snap.errorMessage ?? "portal unreachable",
         health: "unreachable",
         updated_at: now.toISOString(),
@@ -436,6 +439,8 @@ export async function reconcileFoundationPortals(
     // handles that. We just set the latest value; the count of consecutive
     // empty crawls is incremented at update time via a server-side
     // expression when possible, or reset to 0 when we have active calls.
+    // Keep ALL health rows with the same shape (PostgREST requires
+    // identical key sets across a batch upsert).
     healthRows.push({
       funder: snap.funder,
       portal_url: snap.portalUrl,
@@ -443,7 +448,7 @@ export async function reconcileFoundationPortals(
       last_success_at: now.toISOString(),
       last_reachable: true,
       active_calls_count: activeCount,
-      empty_crawls_in_a_row: activeCount > 0 ? 0 : null, // null = "increment server-side next"
+      empty_crawls_in_a_row: activeCount > 0 ? 0 : null,
       health: activeCount > 0 ? "healthy" : "no_calls",
       last_error: null,
       updated_at: now.toISOString(),
@@ -456,18 +461,22 @@ export async function reconcileFoundationPortals(
   // "opened" events, then run updates + event inserts in parallel.
 
   if (grantInserts.length > 0) {
-    // Upsert returns the inserted rows (with ids) so we can attach opened events.
+    // Plain insert (not upsert) — the diff above already filtered out any
+    // AAP we've seen before for this funder, so these are truly new rows.
+    // We can't use ON CONFLICT here because the uniqueness guarantee in
+    // the schema is a *partial* unique index (WHERE portal_stable_key IS
+    // NOT NULL), which Postgres won't let us target in ON CONFLICT.
     const { url, key } = creds();
     try {
       const res = await fetch(
-        `${url}/rest/v1/grants?on_conflict=source_name,portal_stable_key`,
+        `${url}/rest/v1/grants`,
         {
           method: "POST",
           headers: {
             apikey: key,
             Authorization: `Bearer ${key}`,
             "Content-Type": "application/json",
-            Prefer: "resolution=merge-duplicates,return=representation",
+            Prefer: "return=representation",
           },
           body: JSON.stringify(grantInserts),
         }

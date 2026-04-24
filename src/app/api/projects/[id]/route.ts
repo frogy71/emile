@@ -17,6 +17,43 @@ async function getAuthenticatedUser() {
 }
 
 /**
+ * GET /api/projects/[id] — fetch one project (owner-only)
+ *
+ * Used by the edit page to preload existing values into the form.
+ */
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getAuthenticatedUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const supabase = getSupabaseAdmin();
+
+  const { data: project, error } = await supabase
+    .from("projects")
+    .select("*, organizations!inner(user_id)")
+    .eq("id", id)
+    .single();
+
+  if (error || !project) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Ownership check — never leak someone else's project.
+  if ((project.organizations as unknown as { user_id: string })?.user_id !== user.id) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Strip the joined row before returning.
+  const { organizations: _, ...projectClean } = project as Record<string, unknown>;
+  return NextResponse.json({ project: projectClean });
+}
+
+/**
  * PATCH /api/projects/[id] — update a project (rename, edit fields)
  */
 export async function PATCH(

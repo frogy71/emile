@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateProposal } from "@/lib/ai/proposal";
 import { createClient } from "@supabase/supabase-js";
+import { getPlanState } from "@/lib/billing";
 
 function getSupabase() {
   return createClient(
@@ -19,6 +20,20 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "organizationId and grantId are required" },
       { status: 400 }
+    );
+  }
+
+  // Paywall — free tier is capped at FREE_PROPOSAL_LIMIT proposals. Returning
+  // 402 Payment Required is semantic + our UI can react distinctly to upsell.
+  const plan = await getPlanState(organizationId);
+  if (!plan.canGenerateProposal) {
+    return NextResponse.json(
+      {
+        error: "proposal_limit_reached",
+        message: `Tu as utilisé ${plan.proposalsUsed}/${plan.proposalsLimit} propositions du plan gratuit. Passe en Pro pour en générer sans limite.`,
+        plan,
+      },
+      { status: 402 }
     );
   }
 

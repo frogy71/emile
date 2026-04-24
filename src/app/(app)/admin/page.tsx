@@ -19,6 +19,8 @@ import {
   CheckCircle,
   AlertTriangle,
   Zap,
+  Sparkles,
+  DollarSign,
 } from "lucide-react";
 
 interface SourceStat {
@@ -68,6 +70,14 @@ interface IngestionHealth {
   }>;
 }
 
+interface AiCostSummary {
+  totalCalls: number;
+  totalCostUsd: number;
+  monthlyTotal: number;
+  monthlyScoringCalls: number;
+  monthlyProposalCalls: number;
+}
+
 interface AdminStats {
   grants: {
     total: number;
@@ -75,6 +85,7 @@ interface AdminStats {
     withDeadline: number;
     withSummary: number;
   };
+  aiCost: AiCostSummary | null;
   users: {
     total: number;
     signupsThisWeek: number;
@@ -423,6 +434,97 @@ export default function AdminDashboard() {
               <p className="text-xs font-bold">Total abonnés payants</p>
             </div>
           </div>
+        </>
+      )}
+
+      {/* AI cost — margin health. MRR minus AI spend is the real gross margin. */}
+      {stats?.aiCost && (
+        <>
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="text-xl font-black">Coût IA</h2>
+            <Badge variant="purple">
+              <Sparkles className="h-3 w-3 mr-1" />
+              Claude API
+            </Badge>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4 mb-4">
+            <div className="rounded-2xl border-2 border-border bg-[#d4b5ff] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <div className="flex items-center gap-3">
+                <DollarSign className="h-6 w-6" />
+                <div>
+                  <p className="text-2xl font-black">
+                    ${stats.aiCost.monthlyTotal.toFixed(2)}
+                  </p>
+                  <p className="text-xs font-bold">Coût IA ce mois</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border-2 border-border bg-[#a3d5ff] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <div className="flex items-center gap-3">
+                <Target className="h-6 w-6" />
+                <div>
+                  <p className="text-2xl font-black">
+                    {stats.aiCost.monthlyScoringCalls.toLocaleString("fr-FR")}
+                  </p>
+                  <p className="text-xs font-bold">Scorings (mois)</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border-2 border-border bg-[#ffa3d1] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <div className="flex items-center gap-3">
+                <FileText className="h-6 w-6" />
+                <div>
+                  <p className="text-2xl font-black">
+                    {stats.aiCost.monthlyProposalCalls.toLocaleString("fr-FR")}
+                  </p>
+                  <p className="text-xs font-bold">Proposals (mois)</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border-2 border-border bg-[#ffe066] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <div className="flex items-center gap-3">
+                <BarChart3 className="h-6 w-6" />
+                <div>
+                  <p className="text-2xl font-black">
+                    ${stats.aiCost.totalCostUsd.toFixed(2)}
+                  </p>
+                  <p className="text-xs font-bold">
+                    Total depuis le début ({stats.aiCost.totalCalls.toLocaleString("fr-FR")} appels)
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Gross margin estimation — MRR converted to USD at ~1.08 minus IA cost */}
+          {stats.revenue.mrr > 0 && (
+            <div className="rounded-2xl border-2 border-border bg-card p-5 shadow-[4px_4px_0px_0px_#1a1a1a] mb-8">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Marge brute estimée ce mois (hors infra)
+                  </p>
+                  <p className="text-3xl font-black mt-1">
+                    ${(stats.revenue.mrr * 1.08 - stats.aiCost.monthlyTotal).toFixed(2)}
+                  </p>
+                  <p className="text-xs text-muted-foreground font-medium mt-1">
+                    MRR ~${(stats.revenue.mrr * 1.08).toFixed(2)} − IA ${stats.aiCost.monthlyTotal.toFixed(2)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-bold text-muted-foreground">Ratio IA/MRR</p>
+                  <p className="text-2xl font-black">
+                    {stats.revenue.mrr > 0
+                      ? `${((stats.aiCost.monthlyTotal / (stats.revenue.mrr * 1.08)) * 100).toFixed(1)}%`
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 

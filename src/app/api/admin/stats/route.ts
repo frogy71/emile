@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAiCostSummary } from "@/lib/ai/usage-tracker";
 
 const ADMIN_EMAILS = ["francois@tresorier.co", "tresorier.francois@gmail.com"];
 
@@ -173,6 +174,14 @@ export async function GET(request: Request) {
     }
   }
 
+  // --- AI cost summary (tolerant — table may not exist yet on fresh installs) ---
+  let aiCost = null;
+  try {
+    aiCost = await getAiCostSummary();
+  } catch (e) {
+    console.warn("AI cost summary unavailable:", e);
+  }
+
   return NextResponse.json({
     grants: {
       total: totalGrants || 0,
@@ -180,6 +189,7 @@ export async function GET(request: Request) {
       withDeadline: withDeadline || 0,
       withSummary: withSummary || 0,
     },
+    aiCost,
     users: {
       total: totalUsers,
       signupsThisWeek,

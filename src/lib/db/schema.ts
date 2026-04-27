@@ -67,6 +67,7 @@ export const grants = pgTable("grants", {
   language: text("language"),
   status: text("status").default("active"),
   aiSummary: text("ai_summary"),
+  popularityScore: integer("popularity_score").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
@@ -145,6 +146,35 @@ export const ingestionLogs = pgTable("ingestion_logs", {
   trigger: text("trigger").default("manual"), // manual | cron-daily | cron-weekly | admin
 });
 
+// ─── User × Grant Interactions (feedback / learning signal) ─────
+//
+// Tinder-inspired: every gesture (like, dislike, save, dismiss, view,
+// apply) becomes a row, and the matching pipeline boosts/penalises
+// based on these signals over time. The unique index makes the API a
+// clean upsert — re-clicking a button doesn't inflate the table.
+export const userGrantInteractions = pgTable(
+  "user_grant_interactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .references(() => organizations.id)
+      .notNull(),
+    projectId: uuid("project_id").references(() => projects.id),
+    grantId: uuid("grant_id")
+      .references(() => grants.id)
+      .notNull(),
+    interactionType: text("interaction_type").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_interactions_unique").on(
+      table.organizationId,
+      table.grantId,
+      table.interactionType
+    ),
+  ]
+);
+
 // ─── Type exports ────────────────────────────────────────────────
 export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
@@ -156,3 +186,5 @@ export type MatchScore = typeof matchScores.$inferSelect;
 export type Proposal = typeof proposals.$inferSelect;
 export type IngestionLog = typeof ingestionLogs.$inferSelect;
 export type NewIngestionLog = typeof ingestionLogs.$inferInsert;
+export type UserGrantInteraction = typeof userGrantInteractions.$inferSelect;
+export type NewUserGrantInteraction = typeof userGrantInteractions.$inferInsert;

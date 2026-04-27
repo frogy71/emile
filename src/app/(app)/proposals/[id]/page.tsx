@@ -8,6 +8,7 @@ import { ProposalEnrich } from "@/components/proposal-enrich";
 import {
   ArrowLeft,
   Calendar,
+  CheckCircle2,
   Download,
   Euro,
   FileText,
@@ -31,10 +32,14 @@ type ProposalContent = {
  */
 export default async function ProposalDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ new?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
+  const justCreated = sp?.new === "1";
   const supabase = await createClient();
   const {
     data: { user },
@@ -79,6 +84,32 @@ export default async function ProposalDetailPage({
 
   return (
     <div>
+      {/* Just-created success banner — fires when GenerateProposalButton
+          navigates with ?new=1. Inline rather than a toast because the user
+          is on a brand new page and deserves an obvious anchor. */}
+      {justCreated && (
+        <div className="animate-slide-up-fade mb-6 flex items-start gap-3 rounded-2xl border-2 border-border bg-[#c8f76f] p-4 shadow-[4px_4px_0px_0px_#1a1a1a]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-background shadow-[2px_2px_0px_0px_#1a1a1a]">
+            <CheckCircle2 className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-black">
+              Dossier généré avec succès !
+            </p>
+            <p className="text-xs font-semibold text-foreground/80 mt-0.5">
+              Relis les sections, enrichis-les avec les détails spécifiques au
+              bailleur, puis exporte en .docx pour finaliser.
+            </p>
+          </div>
+          <a href={`/api/proposals/export?id=${proposal.id}`} download>
+            <Button variant="default" size="sm">
+              <Download className="h-3.5 w-3.5" />
+              Exporter
+            </Button>
+          </a>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between mb-6 gap-4">
         <div className="flex items-start gap-4 flex-1 min-w-0">

@@ -132,3 +132,58 @@ export async function POST(
     isNew,
   });
 }
+
+/**
+ * DELETE /api/grants/[id]/interact?type=save
+ *
+ * Remove a previously recorded interaction. Used by the "Mes subventions
+ * sauvegardées" page to let the user unsave a grant. We deliberately do NOT
+ * decrement the popularity counter — popularity is a forward-looking signal
+ * across orgs, and one user changing their mind shouldn't retroactively undo
+ * the wisdom-of-the-crowd boost.
+ */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: grantId } = await params;
+  const url = new URL(request.url);
+  const type = url.searchParams.get("type") || "save";
+
+  if (!VALID_TYPES.has(type)) {
+    return NextResponse.json(
+      { error: "type must be one of: " + Array.from(VALID_TYPES).join(", ") },
+      { status: 400 }
+    );
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: org, error: orgError } = await supabaseAdmin
+    .from("organizations")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+  if (orgError || !org) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  const { error: delError } = await supabaseAdmin
+    .from("user_grant_interactions")
+    .delete()
+    .eq("organization_id", org.id)
+    .eq("grant_id", grantId)
+    .eq("interaction_type", type);
+
+  if (delError) {
+    return NextResponse.json({ error: delError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}

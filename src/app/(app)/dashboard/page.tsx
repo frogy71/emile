@@ -8,13 +8,13 @@ import {
   Target,
   FileText,
   ArrowRight,
-  Clock,
   Plus,
   Sparkles,
-  FolderOpen,
   Search,
   Wand2,
   Building2,
+  Bookmark,
+  Euro,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -59,16 +59,11 @@ export default async function DashboardPage({
     : { data: [] };
 
   // Fetch stats in parallel
-  const now = new Date().toISOString().split("T")[0];
-  const in30 = new Date(Date.now() + 30 * 86400000)
-    .toISOString()
-    .split("T")[0];
-
   const [
     { count: grantsCount },
-    { count: matchCount },
     { count: proposalCount },
-    { count: deadlineCount },
+    { count: savedCount },
+    topMatchesResult,
   ] = await Promise.all([
     supabaseAdmin
       .from("grants")
@@ -76,25 +71,51 @@ export default async function DashboardPage({
       .eq("status", "active"),
     org
       ? supabaseAdmin
-          .from("match_scores")
+          .from("proposals")
           .select("*", { count: "exact", head: true })
           .eq("organization_id", org.id)
       : Promise.resolve({ count: 0 }),
     org
       ? supabaseAdmin
-          .from("proposals")
+          .from("user_grant_interactions")
           .select("*", { count: "exact", head: true })
           .eq("organization_id", org.id)
+          .eq("interaction_type", "save")
       : Promise.resolve({ count: 0 }),
-    supabaseAdmin
-      .from("grants")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "active")
-      .gte("deadline", now)
-      .lte("deadline", in30),
+    // Top match scores for the org — used to compute "potential identifié"
+    // (sum of max_amount_eur from this org's best matches across projects).
+    org
+      ? supabaseAdmin
+          .from("match_scores")
+          .select("grant_id, score, grants(max_amount_eur)")
+          .eq("organization_id", org.id)
+          .gte("score", 60)
+          .order("score", { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [] as Array<{ grant_id: string; grants: { max_amount_eur: number | null } | null }> }),
   ]);
 
+  // Sum unique grant amounts (top matches can repeat across projects).
+  const topMatches = (topMatchesResult.data || []) as Array<{
+    grant_id: string;
+    grants: { max_amount_eur: number | null } | null;
+  }>;
+  const seenGrantIds = new Set<string>();
+  let potentialEur = 0;
+  for (const row of topMatches) {
+    if (seenGrantIds.has(row.grant_id)) continue;
+    seenGrantIds.add(row.grant_id);
+    const amount = row.grants?.max_amount_eur;
+    if (typeof amount === "number" && amount > 0) potentialEur += amount;
+  }
+
   const projectList = projects || [];
+
+  const formatEur = (n: number) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(".0", "")} M€`;
+    if (n >= 1_000) return `${Math.round(n / 1_000)} k€`;
+    return `${n} €`;
+  };
 
   return (
     <div>
@@ -192,47 +213,68 @@ export default async function DashboardPage({
         </div>
       )}
 
-      {/* Stats row */}
-      <div className="mt-8 grid gap-4 md:grid-cols-4">
-        <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+      {/* KPI tiles — the four metrics that signal value at a glance:
+          available opportunity, financial potential, what we've turned into a
+          dossier, and what the user has bookmarked to revisit. */}
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border-2 border-border bg-[#ffe066] p-5 shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px]">
           <div className="flex items-center gap-3">
-            <FolderOpen className="h-6 w-6" />
-            <div>
-              <p className="text-3xl font-black">{projectList.length}</p>
-              <p className="text-xs font-bold">Projets actifs</p>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-background shadow-[2px_2px_0px_0px_#1a1a1a]">
+              <Target className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-3xl font-black leading-none">
+                {grantsCount || 0}
+              </p>
+              <p className="text-xs font-bold mt-1">Subventions trouvées</p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border-2 border-border bg-[#ffe066] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+        <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-5 shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px]">
           <div className="flex items-center gap-3">
-            <Target className="h-6 w-6" />
-            <div>
-              <p className="text-3xl font-black">{grantsCount || 0}</p>
-              <p className="text-xs font-bold">Subventions actives</p>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-background shadow-[2px_2px_0px_0px_#1a1a1a]">
+              <Euro className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-3xl font-black leading-none">
+                {potentialEur > 0 ? formatEur(potentialEur) : "—"}
+              </p>
+              <p className="text-xs font-bold mt-1">Potentiel identifié</p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border-2 border-border bg-[#ffa3d1] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+        <div className="rounded-2xl border-2 border-border bg-[#d4b5ff] p-5 shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px]">
           <div className="flex items-center gap-3">
-            <Clock className="h-6 w-6" />
-            <div>
-              <p className="text-3xl font-black">{deadlineCount || 0}</p>
-              <p className="text-xs font-bold">Deadlines ce mois</p>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-background shadow-[2px_2px_0px_0px_#1a1a1a]">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-3xl font-black leading-none">
+                {proposalCount || 0}
+              </p>
+              <p className="text-xs font-bold mt-1">Dossiers générés</p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border-2 border-border bg-[#d4b5ff] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+        <Link
+          href="/saved"
+          className="rounded-2xl border-2 border-border bg-[#ffa3d1] p-5 shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px] focus-visible:outline-none"
+        >
           <div className="flex items-center gap-3">
-            <FileText className="h-6 w-6" />
-            <div>
-              <p className="text-3xl font-black">{proposalCount || 0}</p>
-              <p className="text-xs font-bold">Propositions créées</p>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-background shadow-[2px_2px_0px_0px_#1a1a1a]">
+              <Bookmark className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-3xl font-black leading-none">
+                {savedCount || 0}
+              </p>
+              <p className="text-xs font-bold mt-1">Sauvegardées</p>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Quick links */}

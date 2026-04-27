@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Bookmark,
   Building2,
   FileText,
   FolderOpen,
@@ -142,6 +143,15 @@ export function AppShell({
             pathname={pathname}
           >
             Subventions
+          </NavLink>
+          <NavLink
+            href="/saved"
+            icon={Bookmark}
+            activeClass="bg-[#ffa3d1]"
+            hoverClass="hover:bg-[#ffa3d1]"
+            pathname={pathname}
+          >
+            Sauvegardées
           </NavLink>
           <NavLink
             href="/profile"

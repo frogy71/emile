@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { HelpAssistant } from "@/components/help-assistant";
 import { AppShell } from "@/components/app-shell";
+import { ToastProvider } from "@/components/ui/toast";
 
 export default async function AppLayout({
   children,
@@ -58,10 +59,10 @@ export default async function AppLayout({
   }
 
   return (
-    <>
+    <ToastProvider>
       <AppShell projects={projects}>{children}</AppShell>
       {/* Floating contextual help — renders on every authenticated page */}
       <HelpAssistant />
-    </>
+    </ToastProvider>
   );
 }

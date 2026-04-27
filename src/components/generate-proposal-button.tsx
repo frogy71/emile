@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Loader2, Lock, Sparkles } from "lucide-react";
 import { UpgradeModal } from "@/components/upgrade-modal";
+import { Confetti } from "@/components/ui/confetti";
+import { useToast } from "@/components/ui/toast";
 
 /**
  * GenerateProposalButton — client CTA for the grant detail page.
@@ -32,9 +34,11 @@ export function GenerateProposalButton({
   tier?: "free" | "pro" | "expert";
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paywallMessage, setPaywallMessage] = useState<string | null>(null);
+  const [confetti, setConfetti] = useState(false);
   const [pickedProjectId, setPickedProjectId] = useState<string>(
     preselectedProjectId || projects[0]?.id || ""
   );
@@ -91,7 +95,17 @@ export function GenerateProposalButton({
       }
 
       if (data.proposalId) {
-        router.push(`/proposals/${data.proposalId}`);
+        toast.success(
+          "Dossier généré !",
+          "On t'emmène sur le brouillon — édite, puis exporte en .docx."
+        );
+        setConfetti(true);
+        // Small delay so the user sees the toast/confetti fire before
+        // the navigation kicks in. ?new=1 surfaces a success banner on the
+        // proposal page itself.
+        setTimeout(() => {
+          router.push(`/proposals/${data.proposalId}?new=1`);
+        }, 600);
         return;
       }
 
@@ -100,12 +114,14 @@ export function GenerateProposalButton({
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Erreur réseau.";
       setError(message);
+      toast.error("La génération a échoué", message);
       setLoading(false);
     }
   }
 
   return (
     <div className="flex flex-col items-end gap-1">
+      <Confetti active={confetti} onComplete={() => setConfetti(false)} />
       <div className="flex flex-wrap items-center gap-2">
         {!preselectedProjectId && hasProjects && !isFree && (
           <select

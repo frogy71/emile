@@ -16,6 +16,7 @@ import {
   Sparkles,
   ArrowDown,
 } from "lucide-react";
+import { SkeletonGrantCard } from "@/components/ui/skeleton";
 
 type Grant = {
   id: string;
@@ -374,8 +375,10 @@ export default function GrantsPage() {
 
       {/* Grant list */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div className="space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonGrantCard key={i} />
+          ))}
         </div>
       ) : grants.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20">

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UpgradeModal } from "@/components/upgrade-modal";
+import { useToast } from "@/components/ui/toast";
 
 /**
  * Tinder-style feedback row for a grant. Renders icon-only buttons (with
@@ -130,6 +131,7 @@ export function GrantInteractions({
   tier = "free",
 }: GrantInteractionsProps) {
   const router = useRouter();
+  const toast = useToast();
   const [, startTransition] = useTransition();
   const [active, setActive] = useState<Set<InteractionType>>(
     () => new Set(initialActive)
@@ -178,11 +180,30 @@ export function GrantInteractions({
         }
         return next;
       });
+      // Tiny micro-feedback so the user knows the action stuck — and the
+      // "save" toast doubles as a discoverability nudge for /saved.
+      const messages: Partial<Record<InteractionType, [string, string?]>> = {
+        save: ["Sauvegardé", "Retrouve-la dans Mes subventions sauvegardées."],
+        like: ["Bien noté", "On va te proposer plus de subventions comme celle-ci."],
+        apply: ["Marqué comme « je postule »", "On garde ça en tête pour la suite."],
+        dismiss: ["Subvention ignorée"],
+        dislike: ["Bien noté", "On évitera de te proposer ce type de subvention."],
+      };
+      const msg = messages[type];
+      if (msg) {
+        if (POSITIVE.has(type)) {
+          toast.success(msg[0], msg[1]);
+        } else {
+          toast.info(msg[0], msg[1]);
+        }
+      }
       if (refreshOnSuccess && POSITIVE.has(type)) {
         startTransition(() => router.refresh());
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
+      const message = e instanceof Error ? e.message : "Erreur";
+      setError(message);
+      toast.error("L'action n'a pas pu être enregistrée", message);
     } finally {
       setPending(null);
     }

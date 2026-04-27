@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/foundation-portals",
-      "schedule": "0 3 * * 3"
+      "schedule": "0 3 * * *"
     },
     {
       "path": "/api/cron/cleanup",

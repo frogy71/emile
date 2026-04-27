@@ -37,7 +37,10 @@ import { fetchFRUP, transformFRUPToGrant, fetchFondationsEntreprises, transformF
 import { fetchBpiGrants, transformBpiToGrant } from "./bpifrance";
 import { fetchCuratedFoundations, transformCuratedToGrant } from "./fondations-curated";
 import { fetchFondationDeFrance, transformFDFToGrant } from "./fondation-de-france";
-import { crawlFoundationPortalsSnapshots } from "./foundation-portal-crawler";
+import {
+  crawlFoundationPortalsSnapshots,
+  selectNextPortalBatch,
+} from "./foundation-portal-crawler";
 import { reconcileFoundationPortals } from "./foundation-portal-reconciler";
 import { fetchADEME, transformADEMEToGrant } from "./ademe";
 import { fetchFDVA, transformFDVAToGrant } from "./fdva";
@@ -342,7 +345,17 @@ const SOURCES: SourceSpec[] = [
   {
     // Crawls each curated foundation's portal and extracts their active
     // "appels à projets" (calls for projects) as individual grants.
-    // Runs weekly since it's the slowest source (LLM extraction × 150 sites).
+    //
+    // Batched: a single Vercel function invocation is capped at 300s on the
+    // Hobby plan, which isn't enough to walk all ~200 portals × one LLM
+    // extraction each. So this runs DAILY but only crawls the next ~35
+    // least-recently-crawled portals per invocation; over 5-7 days the full
+    // catalog is covered, then the rotation restarts naturally. The
+    // `last_crawled_at` column on `foundation_portal_health` is the cursor.
+    //
+    // Cadence stays "weekly" so the daily-cadence cron at 06:00 UTC
+    // (`runDailyIngestion`) doesn't double up — only the dedicated
+    // /api/cron/foundation-portals route runs this source.
     //
     // Uses customIngest because the reconciler handles lifecycle events
     // (opened/closed/disappeared/reopened) and writes its own upserts —
@@ -350,8 +363,20 @@ const SOURCES: SourceSpec[] = [
     name: "Fondations privées — appels actifs",
     cadence: "weekly",
     customIngest: async (runId) => {
+      const batchSize = parseInt(
+        process.env.FOUNDATION_PORTAL_BATCH_SIZE ?? "35",
+        10
+      );
+      const batch = await selectNextPortalBatch(batchSize);
+      console.log(
+        `[Fondations privées — appels actifs] Batch ${batch.funders.length}/${batch.total} (never-crawled remaining: ${batch.neverCrawled})`
+      );
+      if (batch.funders.length === 0) {
+        return { fetched: 0, inserted: 0, skipped: 0, errors: 0 };
+      }
       const snapshots = await crawlFoundationPortalsSnapshots({
         budgetSeconds: 240,
+        onlyFunders: batch.funders,
       });
       const res = await reconcileFoundationPortals(snapshots, runId);
       const fetched = snapshots.reduce((n, s) => n + s.calls.length, 0);

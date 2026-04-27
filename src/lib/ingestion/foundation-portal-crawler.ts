@@ -389,6 +389,13 @@ export interface PortalCrawlerOptions {
   limit?: number;
   /** Skip the LLM step and only do link discovery (useful for tests). */
   extractWithLLM?: boolean;
+  /**
+   * Restrict the crawl to a specific subset of funders (matched by `name`
+   * from fondations-curated.ts). Used by the daily Vercel cron to walk
+   * through portals in batches that fit within the 300s function cap.
+   * When omitted, every curated foundation is crawled.
+   */
+  onlyFunders?: string[];
 }
 
 /**
@@ -408,11 +415,16 @@ export async function crawlFoundationPortalsSnapshots(
   const limit = options.limit ?? 200;
   const extract = options.extractWithLLM !== false;
 
-  const foundations = fetchCuratedFoundations().slice(0, limit);
+  const filterSet = options.onlyFunders
+    ? new Set(options.onlyFunders.map((n) => n.trim()))
+    : null;
+  const foundations = fetchCuratedFoundations()
+    .filter((f) => (filterSet ? filterSet.has(f.name) : true))
+    .slice(0, limit);
   const snapshots: CrawlSnapshot[] = [];
 
   console.log(
-    `[portal-crawler] Starting crawl of ${foundations.length} foundations (budget=${options.budgetSeconds ?? 240}s, extract=${extract})`
+    `[portal-crawler] Starting crawl of ${foundations.length} foundations (budget=${options.budgetSeconds ?? 240}s, extract=${extract}${filterSet ? ", filtered" : ""})`
   );
 
   for (const f of foundations) {
@@ -520,6 +532,72 @@ export async function crawlFoundationPortals(
     }
   }
   return out;
+}
+
+/**
+ * Pick the next batch of foundation portals to crawl.
+ *
+ * Strategy: least-recently-crawled wins. We sort the curated list by
+ * `foundation_portal_health.last_crawled_at` ASC NULLS FIRST so that
+ * portals we've never seen jump to the front of the queue, then we walk
+ * through everyone else in age order. With ~200 portals and a daily cron
+ * picking ~35 each run, the full catalog is covered in 5-7 days, then
+ * the rotation naturally restarts.
+ *
+ * The query is best-effort: if Supabase is unreachable or no health rows
+ * exist yet, we fall back to the curated list order, which is itself a
+ * stable starting point.
+ */
+export async function selectNextPortalBatch(
+  batchSize: number = 35
+): Promise<{ funders: string[]; total: number; neverCrawled: number }> {
+  const all = fetchCuratedFoundations();
+  const total = all.length;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const lastByFunder = new Map<string, string | null>();
+
+  if (supabaseUrl && serviceKey) {
+    try {
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/foundation_portal_health?select=funder,last_crawled_at`,
+        {
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+        }
+      );
+      if (res.ok) {
+        const rows = (await res.json()) as Array<{
+          funder: string;
+          last_crawled_at: string | null;
+        }>;
+        for (const r of rows) lastByFunder.set(r.funder, r.last_crawled_at);
+      }
+    } catch (e) {
+      console.warn(
+        "[portal-crawler] Could not read foundation_portal_health for cursor:",
+        e
+      );
+    }
+  }
+
+  // ISO-8601 timestamps sort lexicographically the same as chronologically.
+  const sorted = [...all].sort((a, b) => {
+    const la = lastByFunder.get(a.name) ?? null;
+    const lb = lastByFunder.get(b.name) ?? null;
+    if (la === lb) return 0;
+    if (la === null) return -1;
+    if (lb === null) return 1;
+    return la.localeCompare(lb);
+  });
+
+  const neverCrawled = sorted.filter((f) => !lastByFunder.has(f.name)).length;
+  const batch = sorted.slice(0, Math.max(0, batchSize));
+  return {
+    funders: batch.map((f) => f.name),
+    total,
+    neverCrawled,
+  };
 }
 
 /**

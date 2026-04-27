@@ -221,6 +221,12 @@ export async function reconcileFoundationPortals(
   };
 
   // 1) Pull every existing AAP in this source so we can diff.
+  //
+  // The reconciler is intentionally partial-batch safe: it iterates over
+  // `snapshots` only, so funders absent from this run are never touched
+  // (no false "missed_crawls" bumps when it's just someone else's turn
+  // to be crawled). Pulling all source rows up-front keeps the SQL simple
+  // and works for both the daily ~35-portal cron and the local full crawl.
   const existing = await restSelect<ExistingGrant>(
     `grants?source_name=eq.${encodeURIComponent(
       SOURCE_NAME

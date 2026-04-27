@@ -3,17 +3,19 @@ import { createClient } from "@supabase/supabase-js";
 import { runIngestion, markExpiredGrants } from "@/lib/ingestion";
 
 /**
- * CRON: weekly private-foundation portal crawl (Wednesday 03:00 UTC)
+ * CRON: daily private-foundation portal crawl (03:00 UTC)
  *
  * Every private foundation has its own portal and publishes its own
- * "appels à projets" (calls for projects). This cron walks the curated
- * foundation list, visits each portal, finds the calls-for-projects page
- * heuristically, and uses Claude Haiku to extract 0..N structured call
- * objects into our grants table.
+ * "appels à projets" (calls for projects). One full crawl of ~200 portals
+ * × one LLM extraction each blows past the Vercel Hobby 300s function cap,
+ * so the source's customIngest batches the work: each daily invocation
+ * processes the ~35 least-recently-crawled portals (cursor is
+ * `foundation_portal_health.last_crawled_at`). Over 5-7 days the full
+ * catalog is covered, then the rotation restarts naturally.
  *
- * Runs on its own schedule (separate from weekly-full on Sunday) so the
- * LLM workload has its own 300s budget and doesn't starve the other
- * sources. Mid-week timing also means we pick up new calls fast.
+ * Runs on its own dedicated cron (separate from /api/cron/update-grants
+ * and /api/cron/weekly-full) so the LLM workload has its own 300s budget
+ * and doesn't starve the other sources.
  */
 function getSupabase() {
   return createClient(
@@ -35,7 +37,7 @@ async function handle(request: Request) {
 
   try {
     const report = await runIngestion({
-      trigger: "cron-weekly",
+      trigger: "cron-daily",
       only: ["Fondations privées — appels actifs"],
     });
     const expired = await markExpiredGrants();

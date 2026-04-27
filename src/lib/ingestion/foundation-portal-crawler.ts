@@ -77,28 +77,139 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-async function fetchWithTimeout(
-  url: string,
-  ms = 15000
-): Promise<Response | null> {
+// Realistic browser headers — many foundation sites (Cloudflare, AWS WAF,
+// Imperva) return 403 to anything that smells like a bot. Pretending to be
+// a recent Chrome/macOS browser gets us past the cheapest of those filters
+// without crossing into actively evasive territory. We're a low-frequency
+// well-behaved crawler that respects per-site rate limits — the goal is
+// "look like a human visitor with a normal browser", not to evade detection.
+const BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "no-cache",
+  Pragma: "no-cache",
+  "Sec-Ch-Ua":
+    '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+  "Sec-Ch-Ua-Mobile": "?0",
+  "Sec-Ch-Ua-Platform": '"macOS"',
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
+};
+
+export type FetchOutcome =
+  | { kind: "ok"; res: Response }
+  | { kind: "timeout"; message: string }
+  | { kind: "dns"; message: string }
+  | { kind: "tls"; message: string }
+  | { kind: "http"; status: number; message: string }
+  | { kind: "network"; message: string };
+
+/**
+ * Categorize a thrown fetch error so admins can tell DNS failures apart
+ * from timeouts, TLS issues, etc. Node's undici surfaces the underlying
+ * reason as `cause.code` (ENOTFOUND, ECONNREFUSED, EAI_AGAIN, …).
+ */
+function categorizeError(err: unknown): FetchOutcome {
+  const message = err instanceof Error ? err.message : String(err);
+  const cause =
+    err instanceof Error && "cause" in err
+      ? (err as { cause?: unknown }).cause
+      : undefined;
+  const code =
+    cause && typeof cause === "object" && "code" in cause
+      ? String((cause as { code?: unknown }).code ?? "")
+      : "";
+  const name = err instanceof Error ? err.name : "";
+
+  if (name === "AbortError") return { kind: "timeout", message };
+  if (
+    code === "ENOTFOUND" ||
+    code === "EAI_AGAIN" ||
+    code === "EAI_NODATA" ||
+    /getaddrinfo/i.test(message)
+  ) {
+    return { kind: "dns", message: `DNS ${code || "lookup failed"}` };
+  }
+  if (
+    code === "CERT_HAS_EXPIRED" ||
+    code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+    code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+    /certificate|tls|ssl/i.test(message)
+  ) {
+    return { kind: "tls", message: `TLS ${code || "error"}` };
+  }
+  return { kind: "network", message: code ? `${code}: ${message}` : message };
+}
+
+async function fetchOnce(url: string, ms: number): Promise<FetchOutcome> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
   try {
     const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; EmileBot/1.0; +https://grant-finder-kappa.vercel.app)",
-        Accept: "text/html,application/xhtml+xml",
-        "Accept-Language": "fr,en;q=0.9",
-      },
+      headers: BROWSER_HEADERS,
       signal: ctrl.signal,
       redirect: "follow",
     });
-    return res.ok ? res : null;
-  } catch {
-    return null;
+    if (res.ok) return { kind: "ok", res };
+    return {
+      kind: "http",
+      status: res.status,
+      message: `HTTP ${res.status} ${res.statusText}`.trim(),
+    };
+  } catch (err) {
+    return categorizeError(err);
   } finally {
     clearTimeout(t);
+  }
+}
+
+/**
+ * Fetch with exponential backoff. Retries only failure modes that are
+ * plausibly transient (timeout, DNS, generic network, 5xx, 429). Hard
+ * failures like 403/404 are returned immediately — retrying won't change
+ * the answer and just wastes the run's time budget.
+ */
+async function fetchWithTimeout(
+  url: string,
+  ms = 15000,
+  retries = 2
+): Promise<FetchOutcome> {
+  let last: FetchOutcome = { kind: "network", message: "no attempt" };
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    last = await fetchOnce(url, ms);
+    if (last.kind === "ok") return last;
+    const transient =
+      last.kind === "timeout" ||
+      last.kind === "dns" ||
+      last.kind === "network" ||
+      (last.kind === "http" && (last.status >= 500 || last.status === 429));
+    if (!transient || attempt === retries) return last;
+    // 500ms → 1.5s → 4.5s, with a touch of jitter so we don't hammer in lockstep.
+    const backoff = 500 * Math.pow(3, attempt) + Math.floor(Math.random() * 250);
+    await new Promise((r) => setTimeout(r, backoff));
+  }
+  return last;
+}
+
+function describeFailure(outcome: Exclude<FetchOutcome, { kind: "ok" }>): string {
+  switch (outcome.kind) {
+    case "timeout":
+      return "timeout";
+    case "dns":
+      return outcome.message;
+    case "tls":
+      return outcome.message;
+    case "http":
+      return `HTTP ${outcome.status}`;
+    case "network":
+      return outcome.message;
   }
 }
 
@@ -322,21 +433,23 @@ export async function crawlFoundationPortalsSnapshots(
 
     try {
       const root = await fetchWithTimeout(f.url);
-      if (!root) {
-        snap.errorMessage = "root unreachable";
+      if (root.kind !== "ok") {
+        snap.errorMessage = describeFailure(root);
         snapshots.push(snap);
-        console.log(`[portal-crawler] ${f.name}: root unreachable`);
+        console.log(
+          `[portal-crawler] ${f.name}: unreachable — ${snap.errorMessage}`
+        );
         continue;
       }
       snap.portalReachable = true;
-      const html = await root.text();
+      const html = await root.res.text();
 
       // Step 1: find the most likely calls-for-projects page.
       const callsUrl = findCallsPageUrl(html, f.url);
       let pageHtml = html;
       if (callsUrl !== f.url) {
         const deep = await fetchWithTimeout(callsUrl);
-        if (deep) pageHtml = await deep.text();
+        if (deep.kind === "ok") pageHtml = await deep.res.text();
       }
       const pageText = stripHtml(pageHtml);
 

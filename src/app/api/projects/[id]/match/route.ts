@@ -13,6 +13,11 @@ import {
   isEmbeddingsAvailable,
   toPgVector,
 } from "@/lib/ai/embeddings";
+import {
+  buildFeedbackSignals,
+  computeFeedbackAdjustment,
+  type FeedbackSignals,
+} from "@/lib/ai/feedback";
 
 /**
  * POST /api/projects/[id]/match
@@ -208,7 +213,7 @@ export async function POST(
   //
   // Grants the semantic stage didn't return (no embedding) keep their
   // heuristic score as the blended score so they're not penalised.
-  const blended = scored
+  const blendedRaw = scored
     .filter((c) => !c.heuristic.gatedBy && c.heuristic.score > 0)
     .map((c) => {
       const sim = semantic.scores.get(c.grantId);
@@ -219,13 +224,44 @@ export async function POST(
           : c.heuristic.score;
       return { c, blendedScore, semanticScore };
     });
-  blended.sort((a, b) => b.blendedScore - a.blendedScore);
+
+  // ─ Feedback adjustment ─
+  //
+  // After the objective signals (heuristic + semantic) are blended, fold
+  // in what we've learned from the user's past gestures and the global
+  // popularity counter. The multiplier is bounded (~+15% / -10%) so it
+  // can re-rank near-equals without overwhelming objective fit.
+  const feedback = await loadFeedbackContext(
+    org.id,
+    blendedRaw.map((b) => b.c.grantId)
+  );
+  const blended = blendedRaw.map((b) => {
+    const adj = computeFeedbackAdjustment(feedback.signals, {
+      funder: b.c.grant.funder,
+      thematicAreas: b.c.grant.thematicAreas,
+      grantType: b.c.grant.grantType,
+      popularityScore: feedback.popularity.get(b.c.grantId) ?? 0,
+    });
+    return {
+      ...b,
+      adjustedScore: Math.max(0, Math.min(100, b.blendedScore * adj.multiplier)),
+      feedback: adj,
+    };
+  });
+  blended.sort((a, b) => b.adjustedScore - a.adjustedScore);
 
   // Take top-K semantic pool (default 50), then keep only the top STAGE_2_TOP_N
   // for AI refinement. The intermediate pool exists so the model isn't fed
   // a list that's been pruned too aggressively by either signal alone.
   const semanticPool = blended.slice(0, STAGE_2_SEMANTIC_POOL);
   const topForAi = semanticPool.slice(0, STAGE_2_TOP_N).map((b) => b.c);
+
+  // Per-grant multiplier lookup so we can also apply it to the final
+  // persisted score (refined or heuristic-only).
+  const feedbackMultipliers = new Map<string, number>();
+  for (const b of blended) {
+    feedbackMultipliers.set(b.c.grantId, b.feedback.multiplier);
+  }
 
   const t2Ms = Date.now() - t2Start;
 
@@ -249,16 +285,29 @@ export async function POST(
   }
 
   // ─── Persist match_scores ──────────────────────────────────
+  //
+  // Apply the feedback multiplier to the final stored score so it reflects
+  // the user's preferences even for grants that didn't make it to Stage 3.
+  // Hard-gated (score 0) results stay 0 — feedback shouldn't unblock a
+  // grant the org isn't legally eligible for.
   const upsertRows = scored.map((c) => {
     const result = finalScores.get(c.grantId)!;
+    const mult = feedbackMultipliers.get(c.grantId) ?? 1;
+    const adjustedScore =
+      result.score > 0
+        ? Math.max(0, Math.min(100, Math.round(result.score * mult)))
+        : 0;
     return {
       organization_id: org.id,
       project_id: projectId,
       grant_id: c.grantId,
-      score: result.score,
+      score: adjustedScore,
       explanation: {
         ...result,
         refinedByAi: refinement.results.has(c.grantId),
+        feedbackMultiplier: mult,
+        baseScore: result.score,
+        popularityScore: feedback.popularity.get(c.grantId) ?? 0,
       },
       recommendation: result.recommendation,
     };
@@ -284,11 +333,13 @@ export async function POST(
   }
 
   // ─── Summary stats ────────────────────────────────────────
-  const finalArr = Array.from(finalScores.values());
-  const highMatches = finalArr.filter((r) => r.score >= 75).length;
-  const goodMatches = finalArr.filter((r) => r.score >= 50 && r.score < 75).length;
-  const toPursue = finalArr.filter((r) => r.recommendation === "pursue").length;
-  const gated = finalArr.filter((r) => r.score === 0).length;
+  // Use the persisted (feedback-adjusted) scores so the dashboard counters
+  // match the row scores users see on the project page.
+  const persistedScores = upsertRows.map((r) => r.score);
+  const highMatches = persistedScores.filter((s) => s >= 75).length;
+  const goodMatches = persistedScores.filter((s) => s >= 50 && s < 75).length;
+  const toPursue = upsertRows.filter((r) => r.recommendation === "pursue").length;
+  const gated = persistedScores.filter((s) => s === 0).length;
 
   const totalMs = Date.now() - t0;
 
@@ -498,4 +549,90 @@ async function runPrefilter(
     return { ok: false, error: error?.message || "Failed to load grants" };
   }
   return { ok: true, rows: data as PrefilterRow[], usedRpc: false };
+}
+
+// ─── Feedback context loader ─────────────────────────────────────
+//
+// Pulls the org's full interaction history (joined to the grants we care
+// about for funder/theme/grant_type) and the popularity counter for each
+// candidate in a single pair of queries. Returns empty signals on error so
+// matching never fails because feedback couldn't be loaded.
+
+interface FeedbackContext {
+  signals: FeedbackSignals;
+  popularity: Map<string, number>;
+}
+
+async function loadFeedbackContext(
+  orgId: string,
+  candidateIds: string[]
+): Promise<FeedbackContext> {
+  const empty: FeedbackContext = {
+    signals: buildFeedbackSignals([]),
+    popularity: new Map(),
+  };
+
+  if (candidateIds.length === 0) return empty;
+
+  const [interactionsRes, popularityRes] = await Promise.all([
+    supabaseAdmin
+      .from("user_grant_interactions")
+      .select(
+        "interaction_type, grants(funder, thematic_areas, grant_type)"
+      )
+      .eq("organization_id", orgId)
+      .limit(1000),
+    supabaseAdmin
+      .from("grants")
+      .select("id, popularity_score")
+      .in("id", candidateIds),
+  ]);
+
+  if (interactionsRes.error) {
+    console.warn(
+      "[funnel-match] feedback interactions load failed:",
+      interactionsRes.error.message
+    );
+  }
+  if (popularityRes.error) {
+    console.warn(
+      "[funnel-match] feedback popularity load failed:",
+      popularityRes.error.message
+    );
+  }
+
+  // Supabase types the joined `grants` field as an array even though the FK
+  // makes it a single row. Normalise to `{ grants: { … } | null }`.
+  type RawRow = {
+    interaction_type: string;
+    grants:
+      | {
+          funder?: string | null;
+          thematic_areas?: string[] | null;
+          grant_type?: string | null;
+        }
+      | Array<{
+          funder?: string | null;
+          thematic_areas?: string[] | null;
+          grant_type?: string | null;
+        }>
+      | null;
+  };
+  const normalisedRows = (interactionsRes.data ?? []).map((r) => {
+    const raw = r as RawRow;
+    const grants = Array.isArray(raw.grants) ? raw.grants[0] ?? null : raw.grants;
+    return { interaction_type: raw.interaction_type, grants };
+  });
+
+  const signals = buildFeedbackSignals(normalisedRows);
+
+  const popularity = new Map<string, number>();
+  for (const row of (popularityRes.data ?? []) as Array<{
+    id: string;
+    popularity_score: number | null;
+  }>) {
+    popularity.set(row.id, row.popularity_score ?? 0);
+  }
+
+  return { signals, popularity };
 }

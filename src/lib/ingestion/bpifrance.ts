@@ -16,6 +16,8 @@
  * SMEs can find what applies to them.
  */
 
+import { parseMaxAmountEur } from "./amount-parser";
+
 const BPI_URLS = {
   solutions: "https://www.bpifrance.fr/nos-solutions",
   creation: "https://bpifrance-creation.fr/encyclopedie/aides-financements",
@@ -30,6 +32,10 @@ export interface BpiGrantRaw {
   description: string;
   category: string;
   eligibility: string;
+  minAmountEur?: number | null;
+  maxAmountEur?: number | null;
+  /** ISO date string for one-shot calls; null for rolling/permanent dispositifs. */
+  deadline?: string | null;
 }
 
 function cleanHtml(html: string): string {
@@ -49,6 +55,9 @@ function cleanHtml(html: string): string {
 /**
  * Flagship BPI programmes — always surfaced to the user.
  */
+// Amount/deadline ranges below come from the published BPI fact-sheets at the
+// linked URL. Most BPI dispositifs are rolling (no fixed deadline), so we set
+// `deadline: null` and only fill it when a concours has a published cut-off.
 const BPI_CURATED: BpiGrantRaw[] = [
   {
     title: "Bourse French Tech Émergence",
@@ -57,22 +66,25 @@ const BPI_CURATED: BpiGrantRaw[] = [
       "Subvention jusqu'à 90 000 € pour les startups deep-tech et impact en phase de création, portées par des entrepreneurs à haut potentiel.",
     category: "innovation",
     eligibility: "startup, deep-tech, impact",
+    maxAmountEur: 90000,
   },
   {
     title: "Aide pour la Faisabilité de l'Innovation",
     url: "https://www.bpifrance.fr/catalogue-offres/innovation/aide-pour-la-faisabilite-de-linnovation",
     description:
-      "Subvention pour financer les dépenses amont (études, prototypage) d'un projet d'innovation technologique, produit ou service.",
+      "Subvention pour financer les dépenses amont (études, prototypage) d'un projet d'innovation technologique, produit ou service. Aide forfaitaire jusqu'à 50 000 €.",
     category: "innovation",
     eligibility: "pme, startup",
+    maxAmountEur: 50000,
   },
   {
     title: "Aide au Développement Deep-Tech",
     url: "https://www.bpifrance.fr/catalogue-offres/innovation/aide-au-developpement-deeptech",
     description:
-      "Subvention ou avance récupérable pour les projets deep-tech (IA, quantique, biotech, spatial, énergies).",
+      "Subvention ou avance récupérable pour les projets deep-tech (IA, quantique, biotech, spatial, énergies). Jusqu'à 2 M€ par projet.",
     category: "innovation",
     eligibility: "pme, eti, startup deep-tech",
+    maxAmountEur: 2_000_000,
   },
   {
     title: "Concours i-Nov (PIA)",
@@ -81,14 +93,16 @@ const BPI_CURATED: BpiGrantRaw[] = [
       "Concours national de l'innovation (Programme d'Investissements d'Avenir) avec subventions jusqu'à 5 M€ pour les PME.",
     category: "innovation",
     eligibility: "pme, startup",
+    maxAmountEur: 5_000_000,
   },
   {
     title: "Diag Action Climat",
     url: "https://www.bpifrance.fr/catalogue-offres/transition-ecologique-energetique/diag-action-climat",
     description:
-      "Diagnostic climat co-financé par Bpifrance et l'ADEME pour identifier les actions de décarbonation prioritaires.",
+      "Diagnostic climat co-financé par Bpifrance et l'ADEME pour identifier les actions de décarbonation prioritaires. Prestation forfaitaire (~6 000 € HT, 50 % pris en charge).",
     category: "transition",
     eligibility: "pme, eti",
+    maxAmountEur: 6000,
   },
   {
     title: "Prêt Impact",
@@ -97,14 +111,17 @@ const BPI_CURATED: BpiGrantRaw[] = [
       "Prêt sans garantie (50 000 à 2 M€) pour financer les projets contribuant à la transition écologique et énergétique.",
     category: "transition",
     eligibility: "pme, eti",
+    minAmountEur: 50000,
+    maxAmountEur: 2_000_000,
   },
   {
     title: "Prêt d'Honneur Création (Initiative France)",
     url: "https://bpifrance-creation.fr/encyclopedie/aides-financements/prets-dhonneur",
     description:
-      "Prêt à taux zéro sans garantie, en complément d'un financement bancaire, pour l'amorçage de la création d'entreprise.",
+      "Prêt à taux zéro sans garantie, en complément d'un financement bancaire, pour l'amorçage de la création d'entreprise. Montant moyen 8 000 €, jusqu'à 50 000 € selon le réseau.",
     category: "création",
     eligibility: "création entreprise, tpe",
+    maxAmountEur: 50000,
   },
   {
     title: "NACRE — Nouvel Accompagnement pour la Création d'Entreprise",
@@ -113,12 +130,13 @@ const BPI_CURATED: BpiGrantRaw[] = [
       "Accompagnement régional au montage du projet + prêt à taux zéro jusqu'à 10 000 € pour les demandeurs d'emploi, minima sociaux, jeunes.",
     category: "création",
     eligibility: "création entreprise, demandeur emploi",
+    maxAmountEur: 10000,
   },
   {
     title: "ARCE / ARE — Reprise d'entreprise pour demandeur d'emploi",
     url: "https://bpifrance-creation.fr/encyclopedie/aides-financements/arce-are",
     description:
-      "Dispositifs France Travail : ARCE (versement en capital) ou maintien des ARE pendant la phase de démarrage.",
+      "Dispositifs France Travail : ARCE (versement en capital équivalent à 60 % des allocations chômage restantes) ou maintien des ARE pendant la phase de démarrage.",
     category: "création",
     eligibility: "demandeur emploi",
   },
@@ -252,6 +270,14 @@ export function transformBpiToGrant(raw: BpiGrantRaw) {
         ? ["Création d'entreprise"]
         : ["Innovation", "Impact social"];
 
+  // Fall back to parsing the description when the curated entry didn't supply
+  // an explicit amount — covers the scraped catalogue cards that include
+  // language like "jusqu'à 200 000 €" in their summary.
+  const maxAmountEur =
+    raw.maxAmountEur ??
+    parseMaxAmountEur(raw.description) ??
+    null;
+
   return {
     sourceUrl: raw.url,
     sourceName: "BPI France",
@@ -263,10 +289,10 @@ export function transformBpiToGrant(raw: BpiGrantRaw) {
     thematicAreas: themes,
     eligibleEntities: entities,
     eligibleCountries: ["FR"],
-    minAmountEur: null,
-    maxAmountEur: null,
+    minAmountEur: raw.minAmountEur ?? null,
+    maxAmountEur,
     coFinancingRequired: null,
-    deadline: null,
+    deadline: raw.deadline ? new Date(raw.deadline) : null,
     grantType: raw.category === "création" ? "aide_creation" : "subvention",
     language: "fr",
     status: "active",

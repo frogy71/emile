@@ -45,6 +45,8 @@ export interface EUTopic {
   keywords: string[];
   focusArea: string[];
   description: string | null;
+  /** Total topic budget in EUR, when SEDIA exposes a `budget` field. */
+  budgetEur: number | null;
 }
 
 function firstOr<T>(value: T | T[] | undefined | null, fallback: T | null = null): T | null {
@@ -101,6 +103,16 @@ async function fetchPage(pageNumber: number, pageSize = 100): Promise<{ total: n
     const status = firstOr(m.status as string[]) === "31094502" ? "open" : "forthcoming";
     const identifier = (firstOr(m.identifier as string[]) as string) || "unknown";
 
+    // SEDIA returns budget as a string array of numbers in EUR, e.g. ["7000000"]
+    // (sometimes as a single string). Parse defensively — values arrive without
+    // currency or unit and we trust the API contract that they're EUR.
+    const budgetRaw = firstOr(m.budget as string[] | string) as string | null;
+    let budgetEur: number | null = null;
+    if (budgetRaw) {
+      const n = Number(String(budgetRaw).replace(/[^\d.]/g, ""));
+      if (Number.isFinite(n) && n >= 1_000) budgetEur = Math.round(n);
+    }
+
     return {
       identifier,
       title: (firstOr(m.title as string[]) as string) || identifier,
@@ -110,13 +122,18 @@ async function fetchPage(pageNumber: number, pageSize = 100): Promise<{ total: n
       status: status as "open" | "forthcoming",
       frameworkProgramme: firstOr(m.frameworkProgramme as string[]) as string | null,
       programmePeriod: firstOr(m.programmePeriod as string[]) as string | null,
-      deadline: firstOr(m.deadlineDate as string[]) as string | null,
+      // `closingDate` is filled by SEDIA when `deadlineDate` is empty (e.g.
+      // tenders), so use it as a fallback before giving up.
+      deadline:
+        (firstOr(m.deadlineDate as string[]) as string | null) ||
+        (firstOr(m.closingDate as string[]) as string | null),
       startDate: firstOr(m.startDate as string[]) as string | null,
       typesOfAction: ensureArray(m.typesOfAction as string | string[]),
       destinationDetails: ensureArray(m.destinationDetails as string | string[]),
       keywords: ensureArray(m.keywords as string | string[]),
       focusArea: ensureArray(m.focusArea as string | string[]),
       description: firstOr(m.description as string[]) as string | null,
+      budgetEur,
     };
   });
 
@@ -211,7 +228,7 @@ export function transformEUToGrant(topic: EUTopic) {
     eligibleEntities: ["association", "ngo", "research", "public"],
     eligibleCountries: ["EU", "FR"],
     minAmountEur: null,
-    maxAmountEur: null,
+    maxAmountEur: topic.budgetEur,
     coFinancingRequired: true,
     deadline: topic.deadline ? new Date(topic.deadline) : null,
     grantType: "appel_a_projets",

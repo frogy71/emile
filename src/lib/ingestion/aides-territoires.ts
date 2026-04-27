@@ -11,6 +11,8 @@
  * - /api/aids/?is_live=true — only active/published aids
  */
 
+import { parseMaxAmountEur } from "./amount-parser";
+
 const BASE_URL = "https://aides-territoires.beta.gouv.fr/api";
 
 /**
@@ -38,8 +40,14 @@ async function getJwt(): Promise<string> {
   return data.token as string;
 }
 
+// Note: the API has shifted to returning `financers` / `instructors` /
+// `aid_types` as plain string arrays, with structured object arrays now living
+// under `*_full`. We accept either shape so we don't break if it shifts back.
+type NameLike = string | { name: string; id?: number | string };
+
 export interface AideTerritoireRaw {
   id: number;
+  slug?: string;
   url: string;
   name: string;
   name_initial: string;
@@ -47,18 +55,21 @@ export interface AideTerritoireRaw {
   description: string;
   eligibility: string;
   perimeter: string;
-  financers: { name: string; id: number }[];
-  instructors: { name: string; id: number }[];
+  financers: NameLike[];
+  financers_full?: { id: number; name: string }[];
+  instructors: NameLike[];
+  instructors_full?: { id: number; name: string }[];
   categories: string[];
   targeted_audiences: string[];
-  aid_types: { name: string; id: string }[];
+  aid_types: NameLike[];
+  aid_types_full?: { id: number; name: string; group?: { id: number; name: string } }[];
   destinations: string[];
   start_date: string | null;
   predeposit_date: string | null;
   submission_deadline: string | null;
   subvention_rate_lower_bound: number | null;
   subvention_rate_upper_bound: number | null;
-  subvention_comment: string;
+  subvention_comment: string | null;
   loan_amount: number | null;
   recoverable_advance_amount: number | null;
   contact: string;
@@ -167,17 +178,38 @@ export async function fetchAides(params: {
 }
 
 /**
+ * Normalise a NameLike[] to string[]. The API returns either an array of names
+ * or an array of {name, id} objects depending on field/version.
+ */
+function namesOf(arr: NameLike[] | undefined | null): string[] {
+  if (!arr || !Array.isArray(arr)) return [];
+  return arr
+    .map((v) => (typeof v === "string" ? v : v?.name))
+    .filter((s): s is string => typeof s === "string" && s.length > 0);
+}
+
+/**
  * Transform raw Aides-Territoires data into our Grant schema format
  */
 export function transformToGrant(raw: AideTerritoireRaw) {
+  // The list endpoint sometimes returns `financers` as string[] and the
+  // detail/structured form as `financers_full` (with id+logo). Prefer
+  // `*_full.name` when available, else fall back to the bare names array.
+  const financerNames =
+    raw.financers_full?.map((f) => f.name).filter(Boolean) ??
+    namesOf(raw.financers);
+  const instructorNames =
+    raw.instructors_full?.map((i) => i.name).filter(Boolean) ??
+    namesOf(raw.instructors);
+  const aidTypeNames =
+    raw.aid_types_full?.map((t) => t.name).filter(Boolean) ??
+    namesOf(raw.aid_types);
+
   // Detect country based on programs and financers
   const isEU =
     raw.programs?.some((p) =>
       /europ|erasmus|cerv|horizon|life|esf|feder/i.test(p)
-    ) ||
-    raw.financers?.some((f) =>
-      /europ|commission/i.test(f.name)
-    );
+    ) || financerNames.some((n) => /europ|commission/i.test(n));
 
   // Extract thematic areas from categories
   const thematicAreas = raw.categories?.slice(0, 10) || [];
@@ -185,26 +217,56 @@ export function transformToGrant(raw: AideTerritoireRaw) {
   // Extract eligible entities
   const eligibleEntities = raw.targeted_audiences || [];
 
+  // Funder: financers (the funder) > instructors (the agency processing it) >
+  // null. Empty arrays yield null instead of "" so the row counts as "missing"
+  // rather than "blank".
+  const funder =
+    financerNames.length > 0
+      ? financerNames.join(", ")
+      : instructorNames.length > 0
+        ? instructorNames.join(", ")
+        : null;
+
+  // Max amount: prefer loan/advance numeric fields, then parse free-text
+  // subvention_comment ("jusqu'à 50 000 €"), then look in description.
+  const maxAmountEur =
+    raw.loan_amount ||
+    raw.recoverable_advance_amount ||
+    parseMaxAmountEur(raw.subvention_comment) ||
+    parseMaxAmountEur(raw.description) ||
+    null;
+
+  // Deadline: submission_deadline > predeposit_date (early stage cutoff).
+  const deadlineRaw = raw.submission_deadline || raw.predeposit_date || null;
+  const deadline = deadlineRaw ? new Date(deadlineRaw) : null;
+
+  // Grant type: refine using aid_types when available
+  let grantType = raw.is_call_for_project ? "appel_a_projets" : "subvention";
+  const aidTypeText = aidTypeNames.join(" ").toLowerCase();
+  if (/prêt|loan/.test(aidTypeText)) grantType = "pret";
+  else if (/avance/.test(aidTypeText)) grantType = "avance_recuperable";
+  else if (/garantie/.test(aidTypeText)) grantType = "garantie";
+  else if (/ingénier|conseil|accompagn/.test(aidTypeText) && !raw.is_call_for_project)
+    grantType = "ingenierie";
+
   return {
     sourceUrl: raw.origin_url || raw.application_url || raw.url,
     sourceName: "Aides-Territoires",
     title: raw.name || raw.short_title,
     summary: cleanHtml(raw.description)?.slice(0, 500) || null,
     rawContent: raw.description,
-    funder: raw.financers?.map((f) => f.name).join(", ") || null,
+    funder,
     country: isEU ? "EU" : "FR",
     thematicAreas,
     eligibleEntities,
     eligibleCountries: ["FR"],
     minAmountEur: null,
-    maxAmountEur: raw.loan_amount || raw.recoverable_advance_amount || null,
+    maxAmountEur,
     coFinancingRequired:
       raw.subvention_rate_upper_bound !== null &&
       raw.subvention_rate_upper_bound < 100,
-    deadline: raw.submission_deadline
-      ? new Date(raw.submission_deadline)
-      : null,
-    grantType: raw.is_call_for_project ? "appel_a_projets" : "subvention",
+    deadline,
+    grantType,
     language: "fr",
     status: "active",
     aiSummary: null,

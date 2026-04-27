@@ -1,12 +1,15 @@
 /**
  * GrantScore — grant ↔ project matching
  *
- * Two paths:
- *  - computeHeuristicScore  : deterministic, fast, runs on ~3 000 grants
- *  - computeMatchScore      : Claude-powered, richer, runs on demand
+ * Three paths:
+ *  - computeHeuristicScore   : deterministic, fast, scores one grant
+ *  - computeMatchScore       : Claude-powered, single grant, runs on demand
+ *  - refineTopMatchesWithAI  : Claude-powered, BATCH-refines the top N
+ *                              candidates in a single API call (used by the
+ *                              3-stage funnel match endpoint)
  *
- * Both produce the same MatchScoreResult so the UI doesn't care which path
- * produced a given score.
+ * All paths produce the same MatchScoreResult so the UI doesn't care which
+ * path produced a given score.
  *
  * ## Heuristic design
  *
@@ -636,6 +639,262 @@ export async function computeMatchScore(
     console.error("Scoring error:", error);
     return heuristic;
   }
+}
+
+// ─── Batched AI refinement (Stage 3 of funnel matching) ─────────
+//
+// Sends the top N (default 30) heuristic candidates to Claude in a SINGLE
+// API call. Returns refined scores keyed by grant id. Falls back silently
+// to the heuristic results when the API key is missing or the call fails —
+// the funnel pipeline keeps the heuristic as ground truth either way.
+
+export interface ScoredCandidate {
+  grantId: string;
+  grant: GrantProfile;
+  heuristic: MatchScoreResult;
+}
+
+export interface AiRefinementOutcome {
+  /** Refined results keyed by grantId. Missing entries → fall back to heuristic. */
+  results: Map<string, MatchScoreResult>;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  model: string;
+  /** Human-readable reason if the call was skipped or failed. */
+  skippedReason?: string;
+}
+
+const BATCH_REFINE_MODEL = "claude-haiku-4-5";
+
+export async function refineTopMatchesWithAI(
+  org: OrgProfile,
+  project: ProjectProfile | undefined,
+  candidates: ScoredCandidate[],
+  options?: { userId?: string; orgId?: string }
+): Promise<AiRefinementOutcome> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const empty = (reason: string): AiRefinementOutcome => ({
+    results: new Map(),
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+    model: BATCH_REFINE_MODEL,
+    skippedReason: reason,
+  });
+
+  if (!apiKey) return empty("missing_api_key");
+  if (candidates.length === 0) return empty("no_candidates");
+
+  const prompt = buildBatchScoringPrompt(org, project, candidates);
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: BATCH_REFINE_MODEL,
+        // Each candidate gets ~80-120 output tokens for {score, reco, summary,
+        // strengths, weaknesses, risks}. 30 candidates → ~3.6k tokens. We
+        // budget 6k to leave headroom for verbose explanations.
+        max_tokens: 6000,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[refineTopMatchesWithAI] Claude API error:", response.status);
+      return empty(`api_error_${response.status}`);
+    }
+
+    const data = await response.json();
+    const text: string = data.content?.[0]?.text || "";
+    const usage = data.usage || {};
+    const inputTokens = usage.input_tokens || 0;
+    const outputTokens = usage.output_tokens || 0;
+
+    const costUsd = await logAiUsage({
+      userId: options?.userId,
+      orgId: options?.orgId,
+      action: "scoring",
+      model: BATCH_REFINE_MODEL,
+      inputTokens,
+      outputTokens,
+      metadata: { mode: "batch_refine", candidates: String(candidates.length) },
+    });
+
+    const parsed = parseBatchResponse(text, candidates);
+
+    return {
+      results: parsed,
+      inputTokens,
+      outputTokens,
+      costUsd: costUsd || 0,
+      model: BATCH_REFINE_MODEL,
+      skippedReason: parsed.size === 0 ? "parse_failed" : undefined,
+    };
+  } catch (error) {
+    console.error("[refineTopMatchesWithAI] error:", error);
+    return empty("exception");
+  }
+}
+
+function parseBatchResponse(
+  text: string,
+  candidates: ScoredCandidate[]
+): Map<string, MatchScoreResult> {
+  const out = new Map<string, MatchScoreResult>();
+
+  // Find the JSON array in the model response. Models occasionally wrap
+  // it in ```json fences or prose — strip both.
+  const arrayMatch = text.match(/\[[\s\S]*\]/);
+  if (!arrayMatch) return out;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(arrayMatch[0]);
+  } catch {
+    return out;
+  }
+  if (!Array.isArray(parsed)) return out;
+
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+
+    // Two ways to identify the candidate: by "i" (1-based index) or by
+    // "grantId". Prefer grantId when present.
+    let candidate: ScoredCandidate | undefined;
+    if (typeof e.grantId === "string") {
+      candidate = candidates.find((c) => c.grantId === e.grantId);
+    } else if (typeof e.i === "number") {
+      candidate = candidates[e.i - 1];
+    }
+    if (!candidate) continue;
+
+    const heuristic = candidate.heuristic;
+    const score = clamp(num(e.score, heuristic.score), 0, 100);
+    const recommendation =
+      e.recommendation === "pursue" || e.recommendation === "maybe" || e.recommendation === "skip"
+        ? e.recommendation
+        : score >= 70 ? "pursue" : score >= 45 ? "maybe" : "skip";
+
+    out.set(candidate.grantId, {
+      score,
+      difficulty: heuristic.difficulty,
+      difficultyLabel: heuristic.difficultyLabel,
+      recommendation,
+      strengths: strArr(e.strengths, heuristic.strengths),
+      weaknesses: strArr(e.weaknesses, heuristic.weaknesses),
+      risks: strArr(e.risks, heuristic.risks),
+      summary: typeof e.summary === "string" && e.summary.trim() ? e.summary : heuristic.summary,
+    });
+  }
+
+  return out;
+}
+
+function num(v: unknown, fallback: number): number {
+  return typeof v === "number" && isFinite(v) ? v : fallback;
+}
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+function strArr(v: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(v)) return fallback;
+  return v.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+}
+
+function buildBatchScoringPrompt(
+  org: OrgProfile,
+  project: ProjectProfile | undefined,
+  candidates: ScoredCandidate[]
+): string {
+  const orgBlock = `ORGANISATION:
+- Nom: ${org.name}
+- Statut: ${org.legalStatus || "—"}
+- Mission: ${truncate(org.mission, 400)}
+- Thématiques: ${org.thematicAreas?.join(", ") || "—"}
+- Bénéficiaires: ${org.beneficiaries?.join(", ") || "—"}
+- Zones: ${org.geographicFocus?.join(", ") || "—"}
+- Budget annuel: ${org.annualBudgetEur ? org.annualBudgetEur + " €" : "—"}
+- Équipe: ${org.teamSize || "—"}
+- Historique: ${truncate(org.priorGrants, 200)}`;
+
+  const projectBlock = project
+    ? `PROJET:
+- Nom: ${project.name}
+- Résumé: ${truncate(project.summary, 400)}
+- Objectifs: ${project.objectives?.slice(0, 5).join("; ") || "—"}
+- Bénéficiaires: ${project.targetBeneficiaries?.join(", ") || "—"}
+- Géographie: ${project.targetGeography?.join(", ") || "—"}
+- Budget demandé: ${project.requestedAmountEur ? project.requestedAmountEur + " €" : "—"}
+- Durée: ${project.durationMonths ? project.durationMonths + " mois" : "—"}`
+    : `PROJET: pas de projet ciblé — analyse au niveau organisation.`;
+
+  // For each candidate include the heuristic baseline so the model can
+  // adjust up/down rather than start from scratch. Keep summaries trimmed
+  // to keep input tokens predictable: 30 candidates × ~250 chars summary
+  // ≈ 7.5k chars input.
+  const grantsBlock = candidates
+    .map((c, idx) => {
+      const g = c.grant;
+      const h = c.heuristic;
+      return `[${idx + 1}] grantId=${c.grantId}
+  Titre: ${g.title}
+  Bailleur: ${g.funder || "—"} | Type: ${g.grantType || "—"} | Pays éligibles: ${g.eligibleCountries?.join(", ") || "—"}
+  Entités: ${g.eligibleEntities?.join(", ") || "—"} | Plafond: ${g.maxAmountEur ? g.maxAmountEur + " €" : "—"} | Deadline: ${g.deadline || "—"}
+  Thématiques: ${g.thematicAreas?.join(", ") || "—"}
+  Résumé: ${truncate(g.summary, 350)}
+  Heuristique: ${h.score}/100 (${h.recommendation}) — forces: ${h.strengths.slice(0, 3).join("; ") || "—"} / faiblesses: ${h.weaknesses.slice(0, 2).join("; ") || "—"}`;
+    })
+    .join("\n\n");
+
+  return `Tu es un expert en financement pour les ONG francophones. Tu reçois ${candidates.length} subventions pré-sélectionnées par un filtre heuristique. Ta mission: ré-évaluer chacune avec un œil expert et produire un JSON.
+
+${orgBlock}
+
+${projectBlock}
+
+SUBVENTIONS CANDIDATES (${candidates.length}):
+${grantsBlock}
+
+Ajuste les scores à la hausse ou à la baisse selon ton analyse réelle. N'inflate PAS pour faire plaisir — sois honnête sur la pertinence et la compétition. Tiens compte de:
+- l'alignement thématique réel (titre + résumé + bailleur, pas juste les tags)
+- la cohérence du profil avec le bailleur
+- les critères implicites dans le résumé (taille minimale, expérience requise, partenaires…)
+- la deadline et la lourdeur du dossier
+
+Retourne UNIQUEMENT un tableau JSON (pas de markdown, pas de prose), une entrée par subvention, dans l'ordre fourni:
+[
+  {
+    "i": 1,
+    "grantId": "<grantId fourni>",
+    "score": <0-100>,
+    "recommendation": "pursue" | "maybe" | "skip",
+    "summary": "<1-2 phrases concrètes>",
+    "strengths": ["raison spécifique 1", "raison 2"],
+    "weaknesses": ["point faible concret"],
+    "risks": ["risque opérationnel ou compétitif"]
+  },
+  ...
+]
+
+Règles:
+- 80+ = match excellent (pursue)
+- 60-79 = bon match (pursue)
+- 45-59 = match partiel (maybe)
+- <45 = peu pertinent (skip)
+- Cite des éléments précis du résumé dans strengths/weaknesses, pas de blabla.`;
+}
+
+function truncate(s: string | undefined, n: number): string {
+  if (!s) return "—";
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
 function buildScoringPrompt(

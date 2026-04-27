@@ -6,6 +6,8 @@
  * research, culture. Listing page lists active calls with slugs.
  */
 
+import { parseMaxAmountEur } from "./amount-parser";
+
 const LISTING_URL = "https://www.fondationdefrance.org/fr/appels-a-projets";
 const BASE_URL = "https://www.fondationdefrance.org";
 
@@ -14,6 +16,7 @@ export interface FDFRaw {
   title: string;
   summary: string | null;
   deadline: string | null;
+  maxAmountEur: number | null;
   themes: string[];
 }
 
@@ -144,11 +147,17 @@ export async function fetchFondationDeFrance(): Promise<FDFRaw[]> {
       const fullText = cleanText(detailHtml);
       const deadline = extractDeadline(fullText);
 
+      // Try the meta description first (more curated, less false-positive
+      // numbers like "5 000" referring to people), then the body.
+      const maxAmountEur =
+        parseMaxAmountEur(summary) || parseMaxAmountEur(fullText);
+
       calls.push({
         url,
         title,
         summary,
         deadline,
+        maxAmountEur,
         themes: detectThemes(title + " " + (summary || "")),
       });
 
@@ -179,7 +188,7 @@ export function transformFDFToGrant(raw: FDFRaw) {
     eligibleEntities: ["association", "fondation", "ess"],
     eligibleCountries: ["FR"],
     minAmountEur: null,
-    maxAmountEur: null,
+    maxAmountEur: raw.maxAmountEur,
     coFinancingRequired: false,
     deadline: raw.deadline ? new Date(raw.deadline) : null,
     grantType: "appel_a_projets",

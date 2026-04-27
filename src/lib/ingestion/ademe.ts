@@ -46,61 +46,61 @@ const ADEME_CURATED: ADEMERaw[] = [
     url: "https://agirpourlatransition.ademe.fr/entreprises/dispositif-aide/diag-eco-flux",
     title: "Diag Éco-Flux",
     summary:
-      "Audit des flux (eau, énergie, matières, déchets) dans l'entreprise pour réduire les pertes et les coûts. Prise en charge ADEME/Bpifrance.",
+      "Audit des flux (eau, énergie, matières, déchets) dans l'entreprise pour réduire les pertes et les coûts. Prise en charge ADEME/Bpifrance jusqu'à 75 % du coût (~6 000 € HT).",
     themes: ["Environnement", "Énergie"],
     deadline: null,
     minAmountEur: null,
-    maxAmountEur: null,
+    maxAmountEur: 6000,
   },
   {
     url: "https://agirpourlatransition.ademe.fr/entreprises/dispositif-aide/diag-decarbonaction",
     title: "Diag Décarbon'Action",
     summary:
-      "Bilan GES complet de l'entreprise + plan d'actions de décarbonation, co-financé par Bpifrance et l'ADEME.",
+      "Bilan GES complet de l'entreprise + plan d'actions de décarbonation, co-financé par Bpifrance et l'ADEME (forfait ~6 000 € HT, prise en charge 50 %).",
     themes: ["Environnement", "Énergie"],
     deadline: null,
     minAmountEur: null,
-    maxAmountEur: null,
+    maxAmountEur: 6000,
   },
   {
     url: "https://agirpourlatransition.ademe.fr/entreprises/dispositif-aide/objectif-eco-energie-tertiaire",
     title: "Objectif Éco-Énergie Tertiaire",
     summary:
-      "Aide au financement d'audits énergétiques et de plans d'actions pour les bâtiments tertiaires soumis au décret éco-énergie.",
+      "Aide au financement d'audits énergétiques et de plans d'actions pour les bâtiments tertiaires soumis au décret éco-énergie. Subvention jusqu'à 100 000 € selon le projet.",
     themes: ["Énergie"],
     deadline: null,
     minAmountEur: null,
-    maxAmountEur: null,
+    maxAmountEur: 100000,
   },
   {
     url: "https://agirpourlatransition.ademe.fr/entreprises/dispositif-aide/fonds-chaleur",
     title: "Fonds Chaleur",
     summary:
-      "Soutien aux projets de production de chaleur et de froid à partir de sources renouvelables (solaire thermique, biomasse, géothermie, récupération).",
+      "Soutien aux projets de production de chaleur et de froid à partir de sources renouvelables (solaire thermique, biomasse, géothermie, récupération). Subvention pouvant atteindre 65 % du surcoût d'investissement (jusqu'à plusieurs M€).",
     themes: ["Énergie"],
     deadline: null,
     minAmountEur: null,
-    maxAmountEur: null,
+    maxAmountEur: 5_000_000,
   },
   {
     url: "https://agirpourlatransition.ademe.fr/entreprises/dispositif-aide/fonds-economie-circulaire",
     title: "Fonds Économie circulaire",
     summary:
-      "Soutien aux projets de réduction, réutilisation, réparation, recyclage et valorisation des déchets.",
+      "Soutien aux projets de réduction, réutilisation, réparation, recyclage et valorisation des déchets. Subvention jusqu'à 200 000 € pour les études et plusieurs M€ pour les investissements.",
     themes: ["Environnement"],
     deadline: null,
     minAmountEur: null,
-    maxAmountEur: null,
+    maxAmountEur: 2_000_000,
   },
   {
     url: "https://agirpourlatransition.ademe.fr/entreprises/dispositif-aide/etudes-aide-decision",
     title: "Études à la décision (ADEME)",
     summary:
-      "Financement d'études (diagnostic, faisabilité, schéma directeur) visant à préparer la mise en œuvre d'actions de transition écologique.",
+      "Financement d'études (diagnostic, faisabilité, schéma directeur) visant à préparer la mise en œuvre d'actions de transition écologique. Subvention jusqu'à 70 % du coût de l'étude (plafond 100 000 €).",
     themes: ["Environnement"],
     deadline: null,
     minAmountEur: null,
-    maxAmountEur: null,
+    maxAmountEur: 100000,
   },
 ];
 

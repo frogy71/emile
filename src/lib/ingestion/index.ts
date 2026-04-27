@@ -81,6 +81,15 @@ import {
   fetchFrancophonePrograms,
   transformFrancophoneToGrant,
 } from "./francophone-international";
+import { fetchIdfAides, transformIdfAideToGrant } from "./idf-aides";
+import {
+  fetchOccitanieAides,
+  transformOccitanieToGrant,
+} from "./occitanie-aides";
+import {
+  fetchBpifranceAaps,
+  transformBpifranceAapToGrant,
+} from "./bpifrance-aap";
 import {
   buildGrantEmbeddingText,
   generateEmbeddingsBatch,
@@ -741,6 +750,30 @@ const SOURCES: SourceSpec[] = [
     run: async () => {
       const raw = await fetchFrancophonePrograms();
       return raw.map(transformFrancophoneToGrant);
+    },
+  },
+  {
+    name: "Île-de-France — Aides régionales",
+    cadence: "daily",
+    run: async () => {
+      const raw = await fetchIdfAides();
+      return raw.map(transformIdfAideToGrant);
+    },
+  },
+  {
+    name: "Occitanie — Aides régionales",
+    cadence: "daily",
+    run: async () => {
+      const raw = await fetchOccitanieAides();
+      return raw.map(transformOccitanieToGrant);
+    },
+  },
+  {
+    name: "BPIfrance — Appels à projets",
+    cadence: "daily",
+    run: async () => {
+      const raw = await fetchBpifranceAaps();
+      return raw.map(transformBpifranceAapToGrant);
     },
   },
 ];

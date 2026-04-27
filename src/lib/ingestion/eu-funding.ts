@@ -154,8 +154,12 @@ export async function fetchEUOpenCalls(): Promise<EUTopic[]> {
   all.push(...first);
   console.log(`[EU Funding] Page 1: ${first.length}/${total}`);
 
+  // Live total has hovered around 800 since 2025 but spikes to ~1500 around
+  // call cluster openings (Q1, Q4). Cap at 50 pages = 5000 topics so we never
+  // silently drop calls; warn if we're still hitting the cap.
+  const MAX_PAGES = 50;
   const totalPages = Math.ceil(total / pageSize);
-  for (page = 2; page <= Math.min(totalPages, 20); page++) {
+  for (page = 2; page <= Math.min(totalPages, MAX_PAGES); page++) {
     try {
       const { topics } = await fetchPage(page, pageSize);
       all.push(...topics);
@@ -164,6 +168,11 @@ export async function fetchEUOpenCalls(): Promise<EUTopic[]> {
     } catch (e) {
       console.error(`[EU Funding] Page ${page} failed:`, e);
     }
+  }
+  if (totalPages > MAX_PAGES) {
+    console.warn(
+      `[EU Funding] WARNING: hit page cap ${MAX_PAGES} (${MAX_PAGES * pageSize}/${total}). Bump MAX_PAGES.`
+    );
   }
 
   console.log(`[EU Funding] Done. Total: ${all.length}`);

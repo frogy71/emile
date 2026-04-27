@@ -223,7 +223,6 @@ interface ProjectRow {
   objectives: string[] | null;
   target_beneficiaries: string[] | null;
   target_geography: string[] | null;
-  logframe_data: Record<string, unknown> | null;
 }
 
 interface OrgRow {
@@ -272,7 +271,7 @@ async function backfillProjects(): Promise<{
     let rows: ProjectRow[];
     try {
       rows = await restGet<ProjectRow>(
-        `projects?select=id,organization_id,name,summary,objectives,target_beneficiaries,target_geography,logframe_data${filter}&offset=${offset}&limit=${pageSize}`
+        `projects?select=id,organization_id,name,summary,objectives,target_beneficiaries,target_geography${filter}&offset=${offset}&limit=${pageSize}`
       );
     } catch (e) {
       console.error("[backfill] page fetch failed:", e);
@@ -303,7 +302,6 @@ async function backfillProjects(): Promise<{
       const batch = rows.slice(b, b + BATCH_SIZE);
       const texts = batch.map((r) => {
         const org = orgById.get(r.organization_id);
-        const lf = (r.logframe_data || {}) as Record<string, unknown>;
         return buildProjectEmbeddingText(
           {
             name: r.name,
@@ -311,16 +309,6 @@ async function backfillProjects(): Promise<{
             objectives: r.objectives,
             target_beneficiaries: r.target_beneficiaries,
             target_geography: r.target_geography,
-            themes: lf.themes as string[] | undefined,
-            problem: lf.problem as string | undefined,
-            general_objective: lf.general_objective as string | undefined,
-            beneficiaries_direct: lf.beneficiaries_direct as string | undefined,
-            beneficiaries_indirect: lf.beneficiaries_indirect as string | undefined,
-            methodology: lf.methodology as string | undefined,
-            activities: lf.activities as Array<{
-              title?: string;
-              description?: string;
-            }> | undefined,
           },
           org
             ? {

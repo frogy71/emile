@@ -74,6 +74,14 @@ import {
 } from "./mecenat-entreprise";
 import { fetchPrixPrograms, transformPrixToGrant } from "./prix-concours";
 import {
+  fetchEUStructuralFunds,
+  transformEUStructuralToGrant,
+} from "./eu-structural-funds";
+import {
+  fetchFrancophonePrograms,
+  transformFrancophoneToGrant,
+} from "./francophone-international";
+import {
   buildGrantEmbeddingText,
   generateEmbeddingsBatch,
   isEmbeddingsAvailable,
@@ -717,6 +725,22 @@ const SOURCES: SourceSpec[] = [
     run: async () => {
       const raw = await fetchPrixPrograms();
       return raw.map(transformPrixToGrant);
+    },
+  },
+  {
+    name: "Fonds européens structurels (FEDER/FSE+/FEADER/FEAMPA)",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchEUStructuralFunds();
+      return raw.map(transformEUStructuralToGrant);
+    },
+  },
+  {
+    name: "Bailleurs francophones internationaux",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchFrancophonePrograms();
+      return raw.map(transformFrancophoneToGrant);
     },
   },
 ];

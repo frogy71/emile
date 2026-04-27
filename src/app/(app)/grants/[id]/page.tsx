@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { GenerateProposalButton } from "@/components/generate-proposal-button";
+import { GrantInteractions, type InteractionType } from "@/components/grant-interactions";
 import {
   ArrowLeft,
   Building2,
@@ -16,6 +17,7 @@ import {
   Phone,
   Sparkles,
   Target,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -99,6 +101,22 @@ export default async function GrantDetailPage({
     matchScore = score?.score ?? null;
   }
 
+  // Existing interactions for this org+grant — used to seed the active state
+  // of the like/save/dismiss buttons so users see what they already voted on.
+  let existingInteractions: InteractionType[] = [];
+  if (org) {
+    const { data: interactionRows } = await supabaseAdmin
+      .from("user_grant_interactions")
+      .select("interaction_type")
+      .eq("organization_id", org.id)
+      .eq("grant_id", grant.id);
+    existingInteractions = (interactionRows || [])
+      .map((r) => r.interaction_type as InteractionType)
+      .filter((t): t is InteractionType =>
+        ["like", "dislike", "save", "dismiss", "apply"].includes(t)
+      );
+  }
+
   const days = grant.deadline
     ? Math.ceil(
         (new Date(grant.deadline).getTime() - Date.now()) /
@@ -141,6 +159,13 @@ export default async function GrantDetailPage({
               <Badge variant="green">
                 <Target className="h-3 w-3 mr-1" />
                 Score {matchScore}/100
+              </Badge>
+            )}
+            {grant.popularity_score > 0 && (
+              <Badge variant="purple">
+                <Users className="h-3 w-3 mr-1" />
+                {grant.popularity_score} ONG intéressée
+                {grant.popularity_score > 1 ? "s" : ""}
               </Badge>
             )}
           </div>
@@ -275,6 +300,24 @@ export default async function GrantDetailPage({
           </div>
         )}
       </div>
+
+      {/* Feedback bar — quick like/save/dismiss row above the main CTA. The
+          signal feeds the matching pipeline, so users teaching it pays off
+          on the next match run. */}
+      {org && (
+        <div className="rounded-2xl border-2 border-border bg-card p-4 shadow-[3px_3px_0px_0px_#1a1a1a] mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs font-bold text-foreground/80">
+            Donne-nous ton avis — on apprend tes préférences pour mieux matcher
+            la prochaine fois.
+          </div>
+          <GrantInteractions
+            grantId={grant.id}
+            projectId={projectIdFromUrl || null}
+            layout="detail"
+            initialActive={existingInteractions}
+          />
+        </div>
+      )}
 
       {/* Action bar */}
       <div className="sticky bottom-4 rounded-2xl border-2 border-border bg-[#c8f76f] p-5 shadow-[6px_6px_0px_0px_#1a1a1a]">

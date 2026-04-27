@@ -60,7 +60,7 @@ export default async function ProjectDetailPage({
     supabaseAdmin
       .from("match_scores")
       .select(
-        "*, grants(id, title, funder, summary, deadline, max_amount_eur, source_name, source_url)"
+        "*, grants(id, title, funder, summary, deadline, max_amount_eur, source_name, source_url, popularity_score)"
       )
       .eq("project_id", id)
       .order("score", { ascending: false })

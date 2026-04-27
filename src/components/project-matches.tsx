@@ -13,7 +13,9 @@ import {
   Sparkles,
   Star,
   Target,
+  Users,
 } from "lucide-react";
+import { GrantInteractions } from "@/components/grant-interactions";
 
 /**
  * Match rows are ranked strictly by score (the server sorts them already),
@@ -43,6 +45,7 @@ type Match = {
     max_amount_eur?: number | null;
     source_name?: string | null;
     source_url?: string | null;
+    popularity_score?: number | null;
   } | null;
 };
 
@@ -110,6 +113,20 @@ function isPrivateFoundation(sourceName: string | null | undefined): boolean {
   return /fondation/i.test(sourceName);
 }
 
+/**
+ * Wisdom-of-the-crowd badge — only shown when the grant has been positively
+ * engaged with by at least one org. Singular/plural handled inline.
+ */
+function PopularityBadge({ count }: { count: number | null | undefined }) {
+  if (!count || count <= 0) return null;
+  return (
+    <Badge variant="purple" className="text-[10px]">
+      <Users className="h-2.5 w-2.5 mr-1" />
+      {count} ONG intéressée{count > 1 ? "s" : ""}
+    </Badge>
+  );
+}
+
 // ─── Podium card (gold/silver/bronze) ────────────────────────────
 
 function PodiumCard({
@@ -175,6 +192,7 @@ function PodiumCard({
                   {difficulty.label}
                 </Badge>
               )}
+              <PopularityBadge count={grant.popularity_score} />
             </div>
 
             <h3 className="text-xl font-black text-foreground leading-tight">
@@ -273,6 +291,12 @@ function PodiumCard({
                   </Button>
                 </a>
               )}
+              <GrantInteractions
+                grantId={grant.id}
+                projectId={projectId}
+                layout="card"
+                className="ml-auto"
+              />
             </div>
           </div>
         </div>
@@ -337,6 +361,7 @@ function TopCard({
                   {difficulty.label}
                 </Badge>
               )}
+              <PopularityBadge count={grant.popularity_score} />
             </div>
             <h3 className="text-base font-black leading-tight">{grant.title}</h3>
             {grant.funder && (
@@ -393,6 +418,12 @@ function TopCard({
                 </Button>
               </a>
             )}
+            <GrantInteractions
+              grantId={grant.id}
+              projectId={projectId}
+              layout="card"
+              className="justify-center"
+            />
           </div>
         </div>
         {isExceptional && (

@@ -8,21 +8,30 @@ import {
   type MatchScoreResult,
   type ScoredCandidate,
 } from "@/lib/ai/scoring";
+import {
+  generateProjectEmbedding,
+  isEmbeddingsAvailable,
+  toPgVector,
+} from "@/lib/ai/embeddings";
 
 /**
  * POST /api/projects/[id]/match
  *
- * 3-stage funnel matching pipeline. Designed to scale to 3 000+ grants and
+ * 3-stage funnel matching pipeline. Designed to scale to 10k+ grants and
  * 100+ concurrent users without blowing up AI token costs.
  *
  *   Stage 1 — SQL pre-filter (RPC: prefilter_grants_for_project)
  *     Eliminates 80–90% of grants using indexed gates on geography,
  *     entity eligibility, theme overlap, status, deadline and (loose)
- *     budget. Zero tokens. Target: 3 000 → 200–400.
+ *     budget. Zero tokens. Target: 10k → 200–400.
  *
- *   Stage 2 — Heuristic scoring (in-process)
- *     Runs computeHeuristicScore on the Stage 1 candidates only. Zero
- *     tokens. Sort by score, take the top N (default 30).
+ *   Stage 2 — Semantic ranking (pgvector cosine similarity)
+ *     Embeds the project (cached on the row) and asks Postgres to rank
+ *     the prefiltered grants by cosine similarity. Heuristic still
+ *     computed as a fallback — used for grants without an embedding and
+ *     blended into the top-N pick for budget/deadline/entity signals
+ *     embeddings can't capture. Zero LLM tokens (one cheap embedding
+ *     call only when the project's embedding is stale/missing).
  *
  *   Stage 3 — AI refinement (single batched Claude Haiku call)
  *     Sends all top-N candidates in one prompt. Returns refined scores +
@@ -36,13 +45,17 @@ import {
  * Falls back gracefully:
  *   - If the prefilter RPC isn't deployed yet, we fall back to a full
  *     active-grants scan and let the heuristic do all the gating.
+ *   - If embeddings are unavailable (no provider key, or the project has
+ *     no embedding and we can't compute one), we skip Stage 2's semantic
+ *     ranking and use the heuristic top-N instead.
  *   - If ANTHROPIC_API_KEY is missing or Claude errors out, we keep the
- *     heuristic results and skip the refinement stage.
+ *     heuristic+semantic results and skip the refinement stage.
  *
  * Ownership: the project must belong to the authenticated user's org.
  */
 
 const STAGE_2_TOP_N = 30; // grants forwarded to Claude
+const STAGE_2_SEMANTIC_POOL = 50; // top-K from cosine before final pick
 
 interface PrefilterRow {
   id: string;
@@ -78,7 +91,10 @@ export async function POST(
   const { data: project, error: projectError } = await supabaseAdmin
     .from("projects")
     .select(
-      "*, organizations!inner(id, user_id, name, legal_status, mission, thematic_areas, beneficiaries, geographic_focus, annual_budget_eur, team_size, languages, prior_grants)"
+      // Grab the embedding metadata too so we can decide whether to
+      // refresh it inline. The embedding column itself isn't deserialised
+      // (it'd be 1536 floats); we only check if it's NULL via a flag.
+      "*, embedding_updated_at, organizations!inner(id, user_id, name, legal_status, mission, thematic_areas, beneficiaries, geographic_focus, annual_budget_eur, team_size, languages, prior_grants)"
     )
     .eq("id", projectId)
     .single();
@@ -120,7 +136,7 @@ export async function POST(
   const candidates = stage1.rows;
   const stage1Count = candidates.length;
 
-  // ─── Stage 2: Heuristic scoring ─────────────────────────────
+  // ─── Stage 2: Heuristic scoring + semantic ranking ──────────
   const t2Start = Date.now();
 
   const orgProfile = {
@@ -169,14 +185,47 @@ export async function POST(
     };
   });
 
-  // Sort by heuristic score (high → low) and pick the top N for AI refinement.
-  // We exclude grants that the heuristic gated to 0 — the heuristic answer is
-  // already correct for those (deadline/entity/geo mismatch), so spending AI
-  // tokens on them is pure waste.
-  scored.sort((a, b) => b.heuristic.score - a.heuristic.score);
-  const topForAi = scored
+  // ─ Semantic ranking ─
+  //
+  // Get/refresh the project's embedding, then ask Postgres to rank the
+  // prefiltered grant ids by cosine similarity. Returns a Map<grantId, sim>
+  // where sim ∈ [0,1]. Grants without an embedding aren't returned and
+  // fall back to the pure heuristic ordering.
+  const semantic = await rankBySemanticSimilarity({
+    projectId,
+    project,
+    org,
+    candidateIds: scored
+      .filter((c) => !c.heuristic.gatedBy)
+      .map((c) => c.grantId),
+  });
+
+  // Combine: blendedScore = 0.7 · semantic_in_0_100 + 0.3 · heuristic.
+  // Why blend rather than replace? Embeddings capture topical similarity
+  // beautifully but ignore hard signals — budget fit, deadline runway,
+  // experience with the funder. A 30% heuristic anchor preserves those
+  // without letting keyword fragility dominate the ranking.
+  //
+  // Grants the semantic stage didn't return (no embedding) keep their
+  // heuristic score as the blended score so they're not penalised.
+  const blended = scored
     .filter((c) => !c.heuristic.gatedBy && c.heuristic.score > 0)
-    .slice(0, STAGE_2_TOP_N);
+    .map((c) => {
+      const sim = semantic.scores.get(c.grantId);
+      const semanticScore = sim != null ? Math.round(sim * 100) : null;
+      const blendedScore =
+        semanticScore != null
+          ? 0.7 * semanticScore + 0.3 * c.heuristic.score
+          : c.heuristic.score;
+      return { c, blendedScore, semanticScore };
+    });
+  blended.sort((a, b) => b.blendedScore - a.blendedScore);
+
+  // Take top-K semantic pool (default 50), then keep only the top STAGE_2_TOP_N
+  // for AI refinement. The intermediate pool exists so the model isn't fed
+  // a list that's been pruned too aggressively by either signal alone.
+  const semanticPool = blended.slice(0, STAGE_2_SEMANTIC_POOL);
+  const topForAi = semanticPool.slice(0, STAGE_2_TOP_N).map((b) => b.c);
 
   const t2Ms = Date.now() - t2Start;
 
@@ -248,7 +297,8 @@ export async function POST(
   console.log(
     `[funnel-match] project=${projectId} ` +
       `stage1=${stage1Count} (prefilter=${stage1.usedRpc ? "rpc" : "fallback"} ${t1Ms}ms) ` +
-      `stage2=${topForAi.length} (heuristic ${t2Ms}ms) ` +
+      `stage2=${topForAi.length} (semantic=${semantic.mode}/${semantic.scores.size} ` +
+      `heuristic ${t2Ms}ms) ` +
       `stage3=${refinement.results.size}/${topForAi.length} (` +
       `${refinement.skippedReason ? `skipped:${refinement.skippedReason}` : "ok"} ` +
       `${refinement.inputTokens}/${refinement.outputTokens} tokens ` +
@@ -270,6 +320,11 @@ export async function POST(
       stage2TopN: topForAi.length,
       stage3Refined: refinement.results.size,
       prefilter: stage1.usedRpc ? "rpc" : "fallback",
+      semantic: {
+        mode: semantic.mode,
+        ranked: semantic.scores.size,
+        skippedReason: semantic.skippedReason ?? null,
+      },
       aiSkippedReason: refinement.skippedReason ?? null,
       aiTokens: {
         input: refinement.inputTokens,
@@ -280,6 +335,125 @@ export async function POST(
       timings: { stage1Ms: t1Ms, stage2Ms: t2Ms, stage3Ms: t3Ms, totalMs },
     },
   });
+}
+
+// ─── Semantic ranking helper ─────────────────────────────────
+//
+// Resolves the project's embedding (computing + caching it on first call
+// for a project that has none) and asks Postgres to rank the candidate
+// grant ids by cosine similarity. Returns a sparse map: grants without
+// an embedding aren't included.
+//
+// Failure modes are silent — the caller falls back to the pure heuristic
+// when this returns an empty map. We log the reason for ops debugging.
+
+interface SemanticRankInput {
+  projectId: string;
+  project: {
+    name?: string;
+    summary?: string;
+    objectives?: string[];
+    target_beneficiaries?: string[];
+    target_geography?: string[];
+    logframe_data?: Record<string, unknown> | null;
+    embedding_updated_at?: string | null;
+  };
+  org: {
+    name: string;
+    mission?: string;
+    thematic_areas?: string[];
+    beneficiaries?: string[];
+    geographic_focus?: string[];
+  };
+  candidateIds: string[];
+}
+
+interface SemanticRankResult {
+  scores: Map<string, number>;
+  mode: "rpc" | "client" | "skip";
+  skippedReason?: string;
+}
+
+async function rankBySemanticSimilarity(
+  input: SemanticRankInput
+): Promise<SemanticRankResult> {
+  if (!isEmbeddingsAvailable()) {
+    return { scores: new Map(), mode: "skip", skippedReason: "no_provider" };
+  }
+  if (input.candidateIds.length === 0) {
+    return { scores: new Map(), mode: "skip", skippedReason: "no_candidates" };
+  }
+
+  // Compute (and cache) the project's embedding. We always recompute when
+  // missing. The PATCH route refreshes on edits, so this is just the
+  // first-match-after-creation fallback.
+  const logframe = (input.project.logframe_data || {}) as Record<string, unknown>;
+  const projectInput = {
+    name: input.project.name,
+    summary: input.project.summary,
+    objectives: input.project.objectives,
+    target_beneficiaries: input.project.target_beneficiaries,
+    target_geography: input.project.target_geography,
+    themes: logframe.themes as string[] | undefined,
+    problem: logframe.problem as string | undefined,
+    general_objective: logframe.general_objective as string | undefined,
+    beneficiaries_direct: logframe.beneficiaries_direct as string | undefined,
+    beneficiaries_indirect: logframe.beneficiaries_indirect as string | undefined,
+    methodology: logframe.methodology as string | undefined,
+    activities: logframe.activities as Array<{
+      title?: string;
+      description?: string;
+    }> | undefined,
+  };
+
+  let queryVec: number[] | null;
+  try {
+    queryVec = await generateProjectEmbedding(projectInput, input.org);
+  } catch (e) {
+    console.warn("[funnel-match] project embed failed:", e);
+    return { scores: new Map(), mode: "skip", skippedReason: "embed_error" };
+  }
+  if (!queryVec) {
+    return { scores: new Map(), mode: "skip", skippedReason: "embed_empty" };
+  }
+
+  // Cache the freshly-computed embedding on the project row so the next
+  // run skips this step. Best-effort.
+  if (!input.project.embedding_updated_at) {
+    void supabaseAdmin
+      .from("projects")
+      .update({
+        embedding: toPgVector(queryVec),
+        embedding_updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.projectId)
+      .then(({ error }) => {
+        if (error) console.warn("[funnel-match] cache embed failed:", error.message);
+      });
+  }
+
+  // Ask Postgres to rank — pgvector handles the dot product over the HNSW
+  // index, which is way faster than shipping every grant's 1536-float
+  // vector to Node.js.
+  const { data, error } = await supabaseAdmin.rpc("rank_grants_by_embedding", {
+    p_query_embedding: toPgVector(queryVec),
+    p_grant_ids: input.candidateIds,
+    p_match_count: input.candidateIds.length, // rank everything we sent
+  });
+
+  if (error) {
+    console.warn("[funnel-match] rank_grants_by_embedding error:", error.message);
+    return { scores: new Map(), mode: "skip", skippedReason: "rpc_error" };
+  }
+
+  const out = new Map<string, number>();
+  for (const row of (data ?? []) as Array<{
+    grant_id: string;
+    similarity: number;
+  }>) {
+    out.set(row.grant_id, Number(row.similarity));
+  }
+  return { scores: out, mode: "rpc" };
 }
 
 /**

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import {
+  generateProjectEmbedding,
+  isEmbeddingsAvailable,
+  toPgVector,
+} from "@/lib/ai/embeddings";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -147,6 +152,7 @@ export async function POST(request: Request) {
           { status: 500 }
         );
       }
+      await embedProjectInBackground(supabase, fallback.id, projectRow, orgId);
       return NextResponse.json({ project: fallback }, { status: 201 });
     }
 
@@ -156,5 +162,61 @@ export async function POST(request: Request) {
     );
   }
 
+  await embedProjectInBackground(supabase, project.id, projectRow, orgId);
+
   return NextResponse.json({ project }, { status: 201 });
+}
+
+/**
+ * Generate + persist the project embedding. Awaited inline (rather than
+ * fire-and-forget) so it's available immediately for the next match-run
+ * the user triggers on this project. Best-effort: failures don't block
+ * the API response.
+ */
+async function embedProjectInBackground(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  projectId: string,
+  projectRow: Record<string, unknown>,
+  orgId: string
+) {
+  if (!isEmbeddingsAvailable()) return;
+  try {
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name, mission, thematic_areas, beneficiaries, geographic_focus")
+      .eq("id", orgId)
+      .single();
+
+    const logframe = (projectRow.logframe_data || {}) as Record<string, unknown>;
+    const projectInput = {
+      name: projectRow.name as string,
+      summary: projectRow.summary as string | null,
+      objectives: projectRow.objectives as string[] | null,
+      target_beneficiaries: projectRow.target_beneficiaries as string[] | null,
+      target_geography: projectRow.target_geography as string[] | null,
+      themes: logframe.themes as string[] | undefined,
+      problem: logframe.problem as string | undefined,
+      general_objective: logframe.general_objective as string | undefined,
+      beneficiaries_direct: logframe.beneficiaries_direct as string | undefined,
+      beneficiaries_indirect: logframe.beneficiaries_indirect as string | undefined,
+      methodology: logframe.methodology as string | undefined,
+      activities: logframe.activities as Array<{
+        title?: string;
+        description?: string;
+      }> | undefined,
+    };
+
+    const vec = await generateProjectEmbedding(projectInput, org ?? undefined);
+    if (!vec) return;
+
+    await supabase
+      .from("projects")
+      .update({
+        embedding: toPgVector(vec),
+        embedding_updated_at: new Date().toISOString(),
+      })
+      .eq("id", projectId);
+  } catch (e) {
+    console.warn("[projects] embedding failed:", e);
+  }
 }

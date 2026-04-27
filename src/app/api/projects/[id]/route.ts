@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import {
+  generateProjectEmbedding,
+  isEmbeddingsAvailable,
+  toPgVector,
+} from "@/lib/ai/embeddings";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -111,7 +116,80 @@ export async function PATCH(
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
+  // Re-embed if any embedding-relevant field changed. We don't refresh
+  // when only the name/budget/duration changed and nothing semantic moved
+  // — but the wizard usually rewrites logframe_data wholesale, so we play
+  // it safe and check the field set.
+  const semanticFields = [
+    "summary",
+    "objectives",
+    "target_beneficiaries",
+    "target_geography",
+    "logframe_data",
+    "name",
+  ];
+  const semanticChanged = semanticFields.some((f) => f in updateData);
+  if (semanticChanged) {
+    await refreshProjectEmbedding(supabase, id);
+  }
+
   return NextResponse.json({ project: updated });
+}
+
+async function refreshProjectEmbedding(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  projectId: string
+) {
+  if (!isEmbeddingsAvailable()) return;
+  try {
+    const { data: project } = await supabase
+      .from("projects")
+      .select(
+        "name, summary, objectives, target_beneficiaries, target_geography, logframe_data, organization_id"
+      )
+      .eq("id", projectId)
+      .single();
+    if (!project) return;
+
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name, mission, thematic_areas, beneficiaries, geographic_focus")
+      .eq("id", project.organization_id)
+      .single();
+
+    const logframe = (project.logframe_data || {}) as Record<string, unknown>;
+    const vec = await generateProjectEmbedding(
+      {
+        name: project.name,
+        summary: project.summary,
+        objectives: project.objectives,
+        target_beneficiaries: project.target_beneficiaries,
+        target_geography: project.target_geography,
+        themes: logframe.themes as string[] | undefined,
+        problem: logframe.problem as string | undefined,
+        general_objective: logframe.general_objective as string | undefined,
+        beneficiaries_direct: logframe.beneficiaries_direct as string | undefined,
+        beneficiaries_indirect: logframe.beneficiaries_indirect as string | undefined,
+        methodology: logframe.methodology as string | undefined,
+        activities: logframe.activities as Array<{
+          title?: string;
+          description?: string;
+        }> | undefined,
+      },
+      org ?? undefined
+    );
+    if (!vec) return;
+
+    await supabase
+      .from("projects")
+      .update({
+        embedding: toPgVector(vec),
+        embedding_updated_at: new Date().toISOString(),
+      })
+      .eq("id", projectId);
+  } catch (e) {
+    console.warn("[projects PATCH] embedding refresh failed:", e);
+  }
 }
 
 /**

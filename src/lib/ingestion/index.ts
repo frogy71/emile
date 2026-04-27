@@ -57,6 +57,12 @@ import {
   fetchExtraFoundations,
   transformExtraFoundationToGrant,
 } from "./fondations-extra";
+import {
+  buildGrantEmbeddingText,
+  generateEmbeddingsBatch,
+  isEmbeddingsAvailable,
+  toPgVector,
+} from "../ai/embeddings";
 
 export type IngestionTrigger =
   | "manual"
@@ -283,7 +289,128 @@ async function upsertGrants(
     }
   }
 
+  // Generate embeddings for the upserted rows. Best-effort: failures here
+  // never break the ingest — match pipeline falls back to the heuristic
+  // for grants without an embedding.
+  if (isEmbeddingsAvailable()) {
+    const sourceUrls = Array.from(dedupedByUrl.keys());
+    const embedRes = await embedGrantsBySourceUrl(sourceUrls);
+    console.log(
+      `[Upsert] Embeddings: ${embedRes.embedded} ok, ${embedRes.skipped} skipped, ${embedRes.errors} errors`
+    );
+  }
+
   return { inserted, skipped, errors };
+}
+
+/**
+ * Fetch the rows we just upserted (by source_url) and write embeddings
+ * for any that need one. We re-read instead of using the in-memory grants
+ * because:
+ *   - the DB row is the source of truth (defaults applied, deadline
+ *     normalised, raw_content optionally trimmed)
+ *   - we get the actual `id` we need to update
+ */
+async function embedGrantsBySourceUrl(
+  sourceUrls: string[]
+): Promise<{ embedded: number; skipped: number; errors: number }> {
+  if (sourceUrls.length === 0) return { embedded: 0, skipped: 0, errors: 0 };
+
+  const { supabaseUrl, serviceKey } = getSupabaseCreds();
+  let embedded = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  // Process in chunks of 64 so the embedding API call + the PATCH writes
+  // stay predictable in size.
+  const chunkSize = 64;
+  for (let i = 0; i < sourceUrls.length; i += chunkSize) {
+    const slice = sourceUrls.slice(i, i + chunkSize);
+
+    // 1. Fetch the rows.
+    const inList = slice
+      .map((u) => `"${u.replace(/"/g, '\\"')}"`)
+      .join(",");
+    const fetchUrl = `${supabaseUrl}/rest/v1/grants?source_url=in.(${encodeURIComponent(
+      inList
+    )})&select=id,source_url,title,summary,funder,thematic_areas,eligible_entities,eligible_countries,grant_type`;
+
+    let rows: Array<{
+      id: string;
+      title: string | null;
+      summary: string | null;
+      funder: string | null;
+      thematic_areas: string[] | null;
+      eligible_entities: string[] | null;
+      eligible_countries: string[] | null;
+      grant_type: string | null;
+    }> = [];
+    try {
+      const res = await fetch(fetchUrl, {
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
+      });
+      if (!res.ok) {
+        errors += slice.length;
+        continue;
+      }
+      rows = await res.json();
+    } catch (e) {
+      console.error("[Embed] Fetch error:", e);
+      errors += slice.length;
+      continue;
+    }
+
+    // 2. Build texts + embed in one provider call.
+    const texts = rows.map(buildGrantEmbeddingText);
+    let vecs: (number[] | null)[];
+    try {
+      vecs = await generateEmbeddingsBatch(texts, { kind: "grant" });
+    } catch (e) {
+      console.error("[Embed] Provider error:", e);
+      errors += rows.length;
+      continue;
+    }
+
+    // 3. PATCH each row. Postgres' vector type needs a literal string —
+    // we can't send a JSON array, so we serialise to '[0.1,0.2,…]'.
+    const now = new Date().toISOString();
+    await Promise.all(
+      rows.map(async (row, idx) => {
+        const vec = vecs[idx];
+        if (!vec) {
+          skipped += 1;
+          return;
+        }
+        try {
+          const res = await fetch(
+            `${supabaseUrl}/rest/v1/grants?id=eq.${row.id}`,
+            {
+              method: "PATCH",
+              headers: {
+                apikey: serviceKey,
+                Authorization: `Bearer ${serviceKey}`,
+                "Content-Type": "application/json",
+                Prefer: "return=minimal",
+              },
+              body: JSON.stringify({
+                embedding: toPgVector(vec),
+                embedding_updated_at: now,
+              }),
+            }
+          );
+          if (res.ok) embedded += 1;
+          else errors += 1;
+        } catch {
+          errors += 1;
+        }
+      })
+    );
+  }
+
+  return { embedded, skipped, errors };
 }
 
 // ───────────────────────────────────────────────────────────────

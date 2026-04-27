@@ -24,6 +24,12 @@
  */
 
 import crypto from "crypto";
+import {
+  buildGrantEmbeddingText,
+  generateEmbeddingsBatch,
+  isEmbeddingsAvailable,
+  toPgVector,
+} from "../ai/embeddings";
 
 // Event types match the CHECK constraint in 0005_foundation_lifecycle.sql
 export type LifecycleEventType =
@@ -475,6 +481,13 @@ export async function reconcileFoundationPortals(
   // Order matters: insert new grants FIRST so we have their ids to attach
   // "opened" events, then run updates + event inserts in parallel.
 
+  // Collect ids+rows of successfully inserted new grants so we can embed
+  // them after the inserts complete.
+  const newlyInsertedForEmbedding: Array<{
+    id: string;
+    row: Record<string, unknown>;
+  }> = [];
+
   if (grantInserts.length > 0) {
     // Plain insert (not upsert) — the diff above already filtered out any
     // AAP we've seen before for this funder, so these are truly new rows.
@@ -512,6 +525,7 @@ export async function reconcileFoundationPortals(
               new_status: "active",
               crawl_run_id: runId,
             });
+            newlyInsertedForEmbedding.push({ id: r.id, row });
           }
         } else {
           const errText = await res.text().catch(() => "");
@@ -577,6 +591,55 @@ export async function reconcileFoundationPortals(
 
   if (healthRows.length > 0) {
     await restUpsert("foundation_portal_health", healthRows, "funder");
+  }
+
+  // Embed newly opened AAPs. Best-effort — match pipeline falls back to
+  // the heuristic for grants without an embedding.
+  if (newlyInsertedForEmbedding.length > 0 && isEmbeddingsAvailable()) {
+    try {
+      const texts = newlyInsertedForEmbedding.map(({ row }) =>
+        buildGrantEmbeddingText({
+          title: row.title as string,
+          summary: row.summary as string,
+          funder: row.funder as string,
+          thematic_areas: row.thematic_areas as string[],
+          eligible_entities: row.eligible_entities as string[],
+          eligible_countries: row.eligible_countries as string[],
+          grant_type: row.grant_type as string,
+        })
+      );
+      const vecs = await generateEmbeddingsBatch(texts, { kind: "grant" });
+      const { url, key } = creds();
+      const nowIso = new Date().toISOString();
+      await Promise.all(
+        newlyInsertedForEmbedding.map(async ({ id }, idx) => {
+          const v = vecs[idx];
+          if (!v) return;
+          try {
+            await fetch(`${url}/rest/v1/grants?id=eq.${id}`, {
+              method: "PATCH",
+              headers: {
+                apikey: key,
+                Authorization: `Bearer ${key}`,
+                "Content-Type": "application/json",
+                Prefer: "return=minimal",
+              },
+              body: JSON.stringify({
+                embedding: toPgVector(v),
+                embedding_updated_at: nowIso,
+              }),
+            });
+          } catch {
+            // best-effort
+          }
+        })
+      );
+      console.log(
+        `[reconciler] embedded ${vecs.filter(Boolean).length}/${newlyInsertedForEmbedding.length} new AAPs`
+      );
+    } catch (e) {
+      console.warn("[reconciler] embedding new AAPs failed:", e);
+    }
   }
 
   console.log(

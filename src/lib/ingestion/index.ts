@@ -45,6 +45,18 @@ import { reconcileFoundationPortals } from "./foundation-portal-reconciler";
 import { fetchADEME, transformADEMEToGrant } from "./ademe";
 import { fetchFDVA, transformFDVAToGrant } from "./fdva";
 import { fetchANS, transformANSToGrant } from "./ans";
+import { fetchRegionPrograms, transformRegionToGrant } from "./regions";
+import {
+  fetchMinisterialPrograms,
+  transformMinisterialToGrant,
+} from "./ministeres";
+import { fetchEUExtraPrograms, transformEUExtraToGrant } from "./eu-extra";
+import { fetchAFDPrograms, transformAFDToGrant } from "./afd";
+import { fetchCDCPrograms, transformCDCToGrant } from "./cdc-action-logement";
+import {
+  fetchExtraFoundations,
+  transformExtraFoundationToGrant,
+} from "./fondations-extra";
 
 export type IngestionTrigger =
   | "manual"
@@ -194,6 +206,18 @@ async function upsertGrants(
   let skipped = 0;
   let errors = 0;
 
+  // Dedupe by source_url before chunking — Postgres' ON CONFLICT DO UPDATE
+  // rejects an INSERT that targets the same conflict key twice in one
+  // statement, and several sources (Aides-Territoires especially) emit
+  // multiple grants pointing at the same external origin_url. Keeping the
+  // last occurrence matches "last write wins" semantics.
+  const dedupedByUrl = new Map<string, (typeof grants)[number]>();
+  for (const g of grants) {
+    if (!g.sourceUrl) continue;
+    dedupedByUrl.set(g.sourceUrl, g);
+  }
+  grants = Array.from(dedupedByUrl.values());
+
   const chunkSize = 50;
   for (let i = 0; i < grants.length; i += chunkSize) {
     const chunk = grants.slice(i, i + chunkSize).map((g) => ({
@@ -219,16 +243,19 @@ async function upsertGrants(
     }));
 
     try {
-      const res = await fetch(`${supabaseUrl}/rest/v1/grants`, {
-        method: "POST",
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify(chunk),
-      });
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/grants?on_conflict=source_url`,
+        {
+          method: "POST",
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify(chunk),
+        }
+      );
 
       if (res.ok) {
         inserted += chunk.length;
@@ -419,6 +446,54 @@ const SOURCES: SourceSpec[] = [
     run: async () => {
       const raw = await fetchANS();
       return raw.map(transformANSToGrant);
+    },
+  },
+  {
+    name: "Conseils Régionaux",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchRegionPrograms();
+      return raw.map(transformRegionToGrant);
+    },
+  },
+  {
+    name: "AAP Ministériels",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchMinisterialPrograms();
+      return raw.map(transformMinisterialToGrant);
+    },
+  },
+  {
+    name: "Programmes européens (hors SEDIA)",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchEUExtraPrograms();
+      return raw.map(transformEUExtraToGrant);
+    },
+  },
+  {
+    name: "AFD — Agence Française de Développement",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchAFDPrograms();
+      return raw.map(transformAFDToGrant);
+    },
+  },
+  {
+    name: "Caisse des Dépôts / Action Logement / ANRU",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchCDCPrograms();
+      return raw.map(transformCDCToGrant);
+    },
+  },
+  {
+    name: "Fondations & opérateurs (curated extra)",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchExtraFoundations();
+      return raw.map(transformExtraFoundationToGrant);
     },
   },
 ];

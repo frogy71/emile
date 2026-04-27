@@ -92,23 +92,23 @@ export async function GET(request: Request) {
     .select("id", { count: "exact", head: true });
 
   // --- MRR calculation ---
-  // Monthly subscribers: plan_status='active' AND plan='monthly' => 79 EUR
-  const { count: monthlyActive } = await supabase
+  // Pro subscribers: plan_status='active' AND plan='pro' => 79 EUR/mo
+  const { count: proActive } = await supabase
     .from("organizations")
     .select("id", { count: "exact", head: true })
     .eq("plan_status", "active")
-    .eq("plan", "monthly");
+    .eq("plan", "pro");
 
-  // Annual subscribers: plan_status='active' AND plan='annual' => 59 EUR/mo equivalent
-  const { count: annualActive } = await supabase
+  // Expert subscribers: plan_status='active' AND plan='expert' => 199 EUR/mo
+  const { count: expertActive } = await supabase
     .from("organizations")
     .select("id", { count: "exact", head: true })
     .eq("plan_status", "active")
-    .eq("plan", "annual");
+    .eq("plan", "expert");
 
-  const mrr = (monthlyActive || 0) * 79 + (annualActive || 0) * 59;
+  const mrr = (proActive || 0) * 79 + (expertActive || 0) * 199;
 
-  const totalPayingOrgs = (monthlyActive || 0) + (annualActive || 0);
+  const totalPayingOrgs = (proActive || 0) + (expertActive || 0);
 
   // Conversion rate: paying orgs / total users
   const conversionRate =
@@ -289,8 +289,8 @@ export async function GET(request: Request) {
     },
     organizations: {
       total: totalOrganizations || 0,
-      monthlyActive: monthlyActive || 0,
-      annualActive: annualActive || 0,
+      proActive: proActive || 0,
+      expertActive: expertActive || 0,
     },
     projects: {
       total: totalProjects || 0,

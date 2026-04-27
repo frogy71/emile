@@ -44,27 +44,33 @@ export default function CguPage() {
 
       <section className="space-y-3">
         <h2 className="text-xl font-bold">3. Offres et tarifs</h2>
-        <p>
-          Deux offres sont proposées :
-        </p>
+        <p>Trois offres sont proposées :</p>
         <ul className="list-disc list-inside space-y-1">
           <li>
-            <strong>Gratuit</strong> : exploration du catalogue et scoring
-            limités, une génération de proposition offerte.
+            <strong>Gratuit</strong> : 3 matchings par mois, top 5 résultats,
+            consultation du catalogue et alertes email basiques. Pas de
+            génération de dossier IA.
           </li>
           <li>
-            <strong>Emile Pro</strong> : 79 € HT / mois (ou 59 € HT / mois
-            facturé annuellement), accès illimité aux fonctionnalités décrites
-            sur la page{" "}
-            <a href="/pricing" className="text-primary hover:underline">
-              /pricing
-            </a>
-            .
+            <strong>Emile Pro</strong> : 79 € HT / mois — matchings illimités,
+            top 50 résultats, 5 dossiers IA générés par mois, alertes
+            intelligentes, feedback learning, export DOCX et support email.
+          </li>
+          <li>
+            <strong>Emile Expert</strong> : 199 € HT / mois — tout illimité,
+            dossiers IA illimités, accès prioritaire aux nouvelles subventions,
+            dashboard analytics avancé, support prioritaire, multi-projets
+            illimité.
           </li>
         </ul>
         <p>
-          Les prix sont affichés hors taxes. La TVA applicable est indiquée au
-          moment du paiement.
+          Les fonctionnalités détaillées de chaque offre sont décrites sur la
+          page{" "}
+          <a href="/pricing" className="text-primary hover:underline">
+            /pricing
+          </a>
+          . Les prix sont affichés hors taxes. La TVA applicable est indiquée
+          au moment du paiement.
         </p>
       </section>
 

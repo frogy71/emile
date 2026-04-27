@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { GenerateProposalButton } from "@/components/generate-proposal-button";
 import { GrantInteractions, type InteractionType } from "@/components/grant-interactions";
+import { resolveTier } from "@/lib/plan";
 import {
   ArrowLeft,
   Building2,
@@ -61,9 +62,11 @@ export default async function GrantDetailPage({
   // Resolve org for proposal generation
   const { data: org } = await supabaseAdmin
     .from("organizations")
-    .select("id, name")
+    .select("id, name, plan, plan_status")
     .eq("user_id", user.id)
     .single();
+
+  const tier = resolveTier(org?.plan, org?.plan_status);
 
   // Fetch projects for the "choose a project" picker (if no ?project_id)
   const { data: projects } = org
@@ -315,6 +318,7 @@ export default async function GrantDetailPage({
             projectId={projectIdFromUrl || null}
             layout="detail"
             initialActive={existingInteractions}
+            tier={tier}
           />
         </div>
       )}
@@ -373,6 +377,7 @@ export default async function GrantDetailPage({
                 grantId={grant.id}
                 projects={projects || []}
                 preselectedProjectId={projectIdFromUrl || null}
+                tier={tier}
               />
             ) : (
               <Link href="/onboarding">

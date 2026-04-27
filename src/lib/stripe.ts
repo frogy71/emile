@@ -11,17 +11,32 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
-export const PLANS = {
-  monthly: {
-    name: "Emile Pro — Mensuel",
-    price: 7900, // cents
-    interval: "month" as const,
-    priceId: process.env.STRIPE_MONTHLY_PRICE_ID,
+export type PlanKey = "pro" | "expert";
+
+export const PLANS: Record<
+  PlanKey,
+  {
+    name: string;
+    description: string;
+    price: number; // cents
+    interval: "month";
+    priceId: string | undefined;
+  }
+> = {
+  pro: {
+    name: "Emile Pro",
+    description:
+      "Matchings illimités, 5 dossiers IA / mois, alertes intelligentes, export DOCX, support email.",
+    price: 7900,
+    interval: "month",
+    priceId: process.env.STRIPE_PRO_PRICE_ID,
   },
-  annual: {
-    name: "Emile Pro — Annuel",
-    price: 70800, // cents (59€/month * 12)
-    interval: "year" as const,
-    priceId: process.env.STRIPE_ANNUAL_PRICE_ID,
+  expert: {
+    name: "Emile Expert",
+    description:
+      "Tout illimité, dossiers IA illimités, accès prioritaire aux nouvelles subventions, dashboard analytics, support prioritaire.",
+    price: 19900,
+    interval: "month",
+    priceId: process.env.STRIPE_EXPERT_PRICE_ID,
   },
 };

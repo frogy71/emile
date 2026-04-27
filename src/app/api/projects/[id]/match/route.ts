@@ -18,6 +18,7 @@ import {
   computeFeedbackAdjustment,
   type FeedbackSignals,
 } from "@/lib/ai/feedback";
+import { getPlan, incrementMatchRun } from "@/lib/plan";
 
 /**
  * POST /api/projects/[id]/match
@@ -125,6 +126,23 @@ export async function POST(
 
   if (!org || org.user_id !== user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // ─── Paywall: free tier capped at 3 matchings / month ──────
+  const plan = await getPlan(org.id);
+  if (!plan.canMatch) {
+    return NextResponse.json(
+      {
+        error: "match_limit_reached",
+        message: `Tu as utilisé tes ${plan.limits.matchesPerMonth} matchings gratuits ce mois-ci. Passe en Pro pour des matchings illimités.`,
+        plan: {
+          tier: plan.tier,
+          matchesUsed: plan.matchesUsed,
+          matchesLimit: plan.limits.matchesPerMonth,
+        },
+      },
+      { status: 402 }
+    );
   }
 
   // ─── Stage 1: SQL pre-filter ────────────────────────────────
@@ -356,6 +374,14 @@ export async function POST(
       `$${refinement.costUsd.toFixed(4)} ${t3Ms}ms) ` +
       `total=${totalMs}ms upserted=${inserted}/${upsertRows.length}`
   );
+
+  // Bump the monthly match-run counter so the freemium cap stays accurate.
+  // Best-effort: if the table isn't there yet, we don't want to block matching.
+  try {
+    await incrementMatchRun(org.id);
+  } catch (e) {
+    console.warn("[match] match-run counter bump failed:", e);
+  }
 
   return NextResponse.json({
     success: true,

@@ -16,6 +16,8 @@ import {
   Users,
 } from "lucide-react";
 import { GrantInteractions } from "@/components/grant-interactions";
+import { PaywallOverlay } from "@/components/paywall-overlay";
+import type { PlanTier } from "@/lib/plan";
 
 /**
  * Match rows are ranked strictly by score (the server sorts them already),
@@ -133,10 +135,12 @@ function PodiumCard({
   match,
   rank,
   projectId,
+  tier,
 }: {
   match: Match;
   rank: 1 | 2 | 3;
   projectId: string;
+  tier: PlanTier;
 }) {
   const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉";
   const rankLabel =
@@ -296,6 +300,7 @@ function PodiumCard({
                 projectId={projectId}
                 layout="card"
                 className="ml-auto"
+                tier={tier}
               />
             </div>
           </div>
@@ -311,10 +316,12 @@ function TopCard({
   match,
   rank,
   projectId,
+  tier,
 }: {
   match: Match;
   rank: number;
   projectId: string;
+  tier: PlanTier;
 }) {
   const grant = match.grants;
   if (!grant) return null;
@@ -423,6 +430,7 @@ function TopCard({
               projectId={projectId}
               layout="card"
               className="justify-center"
+              tier={tier}
             />
           </div>
         </div>
@@ -493,17 +501,23 @@ function CompactRow({
 export function ProjectMatches({
   matches,
   projectId,
+  tier = "free",
 }: {
   matches: Match[];
   projectId: string;
+  tier?: PlanTier;
 }) {
   const [showRest, setShowRest] = useState(false);
+  const isFree = tier === "free";
 
   // Hard-gated matches (score = 0) shouldn't pollute the top lists.
   const ranked = matches.filter((m) => m.score > 0);
   const podium = ranked.slice(0, 3);
-  const topTier = ranked.slice(3, 7);
-  const rest = ranked.slice(7);
+  // Free tier: show #4-#6 in clear, blur the rest. Paying tiers: keep
+  // the original 4-7 visible window.
+  const topTier = isFree ? ranked.slice(3, 6) : ranked.slice(3, 7);
+  const restStart = isFree ? 6 : 7;
+  const rest = ranked.slice(restStart);
 
   // Exceptional private-foundation matches (score ≥ 95). These get a
   // dedicated "à contacter en direct" banner at the top because direct
@@ -525,8 +539,9 @@ export function ProjectMatches({
 
   return (
     <div className="space-y-8">
-      {/* Exceptional-foundations banner */}
-      {exceptionalFoundations.length > 0 && (
+      {/* Exceptional-foundations banner — hidden for free users since the
+          underlying matches are paywalled in the podium. */}
+      {!isFree && exceptionalFoundations.length > 0 && (
         <div className="rounded-2xl border-2 border-border bg-[#ffe066] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-background shadow-[2px_2px_0px_0px_#1a1a1a] shrink-0">
@@ -585,32 +600,67 @@ export function ProjectMatches({
           <div className="flex items-center gap-2 mb-4">
             <span className="text-lg">🏆</span>
             <h3 className="text-lg font-black">Top 3 pour ton projet</h3>
-            <Badge variant="green" className="text-[10px]">
-              À poursuivre en priorité
-            </Badge>
+            {isFree ? (
+              <Badge variant="purple" className="text-[10px]">
+                Réservé Pro
+              </Badge>
+            ) : (
+              <Badge variant="green" className="text-[10px]">
+                À poursuivre en priorité
+              </Badge>
+            )}
           </div>
-          <div className="grid gap-4">
-            {podium.map((match, i) => (
-              <PodiumCard
-                key={match.id}
-                match={match}
-                rank={(i + 1) as 1 | 2 | 3}
-                projectId={projectId}
-              />
-            ))}
-          </div>
+          {isFree ? (
+            <PaywallOverlay
+              title="Débloquez vos meilleurs matchs"
+              subtitle="Vos top 3 matchs sont les plus prometteurs. Passez à Pro pour les voir en clair et lancer un dossier IA."
+              cta="Passer Pro — 79€/mois"
+              blurClass="blur-md"
+            >
+              <div className="grid gap-4">
+                {podium.map((match, i) => (
+                  <PodiumCard
+                    key={match.id}
+                    match={match}
+                    rank={(i + 1) as 1 | 2 | 3}
+                    projectId={projectId}
+                    tier={tier}
+                  />
+                ))}
+              </div>
+            </PaywallOverlay>
+          ) : (
+            <div className="grid gap-4">
+              {podium.map((match, i) => (
+                <PodiumCard
+                  key={match.id}
+                  match={match}
+                  rank={(i + 1) as 1 | 2 | 3}
+                  projectId={projectId}
+                  tier={tier}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* TOP 4-7 */}
+      {/* TOP 4-7 (or 4-6 on free) — fully visible to everyone */}
       {topTier.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-4">
             <span className="text-lg">⭐</span>
-            <h3 className="text-lg font-black">Autres matches à considérer</h3>
+            <h3 className="text-lg font-black">
+              {isFree ? "Aperçu de tes matches" : "Autres matches à considérer"}
+            </h3>
             <span className="text-xs font-bold text-muted-foreground">
               ({topTier.length})
             </span>
+            {isFree && (
+              <Badge variant="green" className="text-[10px]">
+                Visible gratuitement
+              </Badge>
+            )}
           </div>
           <div className="grid gap-3">
             {topTier.map((match, i) => (
@@ -619,6 +669,7 @@ export function ProjectMatches({
                 match={match}
                 rank={i + 4}
                 projectId={projectId}
+                tier={tier}
               />
             ))}
           </div>
@@ -626,36 +677,57 @@ export function ProjectMatches({
       )}
 
       {/* COLLAPSED REST */}
-      {rest.length > 0 && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowRest((v) => !v)}
-            className="w-full flex items-center justify-between rounded-xl border-2 border-border bg-secondary px-4 py-3 text-sm font-black hover:bg-background transition-colors"
-          >
-            <span>
-              {showRest ? "Masquer" : "Voir"} les {rest.length} autres matches
-            </span>
-            {showRest ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
+      {rest.length > 0 &&
+        (isFree ? (
+          <div>
+            <PaywallOverlay
+              title={`+${rest.length} autres matches verrouillés`}
+              subtitle="Vos résultats au-delà du top 6 sont réservés au plan Pro."
+              cta="Voir plus avec Pro"
+              blurClass="blur-md"
+            >
+              <div className="space-y-2">
+                {rest.slice(0, 5).map((match, i) => (
+                  <CompactRow
+                    key={match.id}
+                    match={match}
+                    rank={i + restStart + 1}
+                    projectId={projectId}
+                  />
+                ))}
+              </div>
+            </PaywallOverlay>
+          </div>
+        ) : (
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowRest((v) => !v)}
+              className="w-full flex items-center justify-between rounded-xl border-2 border-border bg-secondary px-4 py-3 text-sm font-black hover:bg-background transition-colors"
+            >
+              <span>
+                {showRest ? "Masquer" : "Voir"} les {rest.length} autres matches
+              </span>
+              {showRest ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+            {showRest && (
+              <div className="mt-3 space-y-2">
+                {rest.map((match, i) => (
+                  <CompactRow
+                    key={match.id}
+                    match={match}
+                    rank={i + restStart + 1}
+                    projectId={projectId}
+                  />
+                ))}
+              </div>
             )}
-          </button>
-          {showRest && (
-            <div className="mt-3 space-y-2">
-              {rest.map((match, i) => (
-                <CompactRow
-                  key={match.id}
-                  match={match}
-                  rank={i + 8}
-                  projectId={projectId}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        ))}
     </div>
   );
 }

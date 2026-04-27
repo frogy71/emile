@@ -11,6 +11,7 @@ import {
   BarChart3,
   Sparkles,
   Check,
+  Crown,
   X,
 } from "lucide-react";
 
@@ -76,7 +77,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     label: "Prix",
-    emile: { icon: null, text: "Gratuit pour commencer" },
+    emile: { icon: null, text: "À partir de 0€" },
     aidesTerritoires: { icon: null, text: "Gratuit" },
     welcomeEurope: { icon: null, text: "150–300 €/mois" },
     subventionsFr: { icon: null, text: "Gratuit (limité)" },
@@ -152,16 +153,23 @@ const STRUCTURED_DATA = {
       offers: [
         {
           "@type": "Offer",
-          price: "79",
+          price: "0",
           priceCurrency: "EUR",
-          name: "Emile Pro — Mensuel",
+          name: "Emile Gratuit",
           url: `${SITE_URL}/pricing`,
         },
         {
           "@type": "Offer",
-          price: "59",
+          price: "79",
           priceCurrency: "EUR",
-          name: "Emile Pro — Annuel (par mois)",
+          name: "Emile Pro",
+          url: `${SITE_URL}/pricing`,
+        },
+        {
+          "@type": "Offer",
+          price: "199",
+          priceCurrency: "EUR",
+          name: "Emile Expert",
           url: `${SITE_URL}/pricing`,
         },
       ],
@@ -456,29 +464,28 @@ export default function LandingPage() {
       <section id="pricing" className="border-t-2 border-border py-20">
         <div className="mx-auto max-w-6xl px-6">
           <h2 className="text-4xl font-black text-foreground text-center">
-            Commencez gratuitement.
+            À partir de 0€.
           </h2>
           <p className="mt-3 text-center text-muted-foreground font-medium max-w-2xl mx-auto">
-            Matching IA illimité et 1 brouillon de proposition gratuit —
-            suffisant pour tester Emile de bout en bout avant de passer Pro.
+            Trois plans pour s&apos;adapter à votre rythme — du test à la production.
           </p>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             Prix HT — TVA non applicable pour les associations (article 261-7-1° du CGI)
           </p>
 
-          <div className="mt-12 grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
-            {/* Free */}
-            <div className="rounded-2xl border-2 border-border bg-card p-8 shadow-[4px_4px_0px_0px_#1a1a1a]">
+          <div className="mt-12 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto items-start">
+            {/* Gratuit */}
+            <div className="rounded-2xl border-2 border-border bg-card p-7 shadow-[4px_4px_0px_0px_#1a1a1a]">
               <div className="flex items-center gap-2">
-                <h3 className="text-xl font-black">Découverte</h3>
-                <Badge variant="secondary">Gratuit</Badge>
+                <h3 className="text-xl font-black">Gratuit</h3>
+                <Badge variant="secondary">Découverte</Badge>
               </div>
               <p className="mt-4">
-                <span className="text-5xl font-black">0€</span>
+                <span className="text-4xl font-black">0€</span>
                 <span className="text-muted-foreground font-bold"> / pour toujours</span>
               </p>
               <p className="mt-2 text-sm text-muted-foreground font-medium">
-                Matching illimité + 1 brouillon IA. Aucune carte requise.
+                3 matchings/mois, top 5 résultats. Aucune carte.
               </p>
               <Link href="/signup">
                 <Button variant="outline" size="lg" className="mt-6 w-full">
@@ -488,65 +495,66 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* Pro */}
-            <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-8 shadow-[6px_6px_0px_0px_#1a1a1a] relative">
-              <Badge variant="default" className="absolute -top-3 right-4 bg-foreground text-background px-3 py-1 text-xs font-black">
-                Le + populaire
+            {/* Pro — highlighted */}
+            <div className="rounded-2xl border-4 border-foreground bg-[#ffe066] p-7 shadow-[8px_8px_0px_0px_#1a1a1a] relative md:-mt-2">
+              <Badge variant="default" className="absolute -top-3 left-1/2 -translate-x-1/2 bg-foreground text-background px-3 py-1 text-xs font-black whitespace-nowrap">
+                Le plus populaire
               </Badge>
               <div className="flex items-center gap-2">
                 <h3 className="text-xl font-black">Pro</h3>
                 <Badge variant="green">Illimité</Badge>
               </div>
               <p className="mt-4">
-                <span className="text-5xl font-black">79€</span>
+                <span className="text-4xl font-black">79€</span>
                 <span className="font-bold">/mois HT</span>
               </p>
-              <p className="mt-1 text-sm font-bold">
-                ou <span>59€/mois</span> en annuel (708€/an)
+              <p className="mt-2 text-sm font-medium text-foreground/80">
+                Matchings illimités, 5 dossiers IA/mois, alertes intelligentes.
               </p>
-              <Link href="/signup?plan=monthly">
+              <Link href="/signup?plan=pro">
                 <Button variant="default" size="lg" className="mt-6 w-full">
                   <Sparkles className="h-4 w-4" />
-                  Démarrer l&apos;essai Pro
+                  Démarrer Pro
                 </Button>
               </Link>
               <p className="mt-2 text-center text-[11px] font-bold text-foreground/70">
                 Essai sans carte · annulable à tout moment
               </p>
             </div>
+
+            {/* Expert */}
+            <div className="rounded-2xl border-2 border-border bg-[#a3d5ff] p-7 shadow-[4px_4px_0px_0px_#1a1a1a]">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-black">Expert</h3>
+                <Badge variant="default">
+                  <Crown className="h-3 w-3 mr-1" />
+                  Premium
+                </Badge>
+              </div>
+              <p className="mt-4">
+                <span className="text-4xl font-black">199€</span>
+                <span className="font-bold">/mois HT</span>
+              </p>
+              <p className="mt-2 text-sm font-medium text-foreground/80">
+                Tout illimité, dashboard analytics, support prioritaire.
+              </p>
+              <Link href="/signup?plan=expert">
+                <Button variant="outline" size="lg" className="mt-6 w-full">
+                  <Crown className="h-4 w-4" />
+                  Choisir Expert
+                </Button>
+              </Link>
+            </div>
           </div>
 
-          {/* Features list */}
-          <div className="mt-10 max-w-3xl mx-auto">
-            <div className="rounded-2xl border-2 border-border bg-card p-6 shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <p className="font-black text-center mb-4">Inclus dans les deux plans :</p>
-              <div className="grid gap-2 md:grid-cols-2">
-                {[
-                  "~2 800 subventions FR + UE",
-                  "Matching IA illimité (GrantScore)",
-                  "Alertes email personnalisées",
-                  "Projets illimités",
-                  "Filtres par type, territoire, thématique",
-                  "Score de difficulté par grant",
-                  "Mise à jour quotidienne des sources",
-                  "Export .docx + édition en ligne",
-                ].map((f) => (
-                  <span key={f} className="flex items-center gap-2 text-sm font-semibold">
-                    <Check className="h-4 w-4 text-[#c8f76f] shrink-0" />
-                    {f}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-6 text-center">
-                <Link
-                  href="/pricing"
-                  className="inline-flex items-center gap-1 text-sm font-bold text-foreground/80 hover:text-foreground underline underline-offset-4"
-                >
-                  Voir tous les détails et la FAQ
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
-            </div>
+          <div className="mt-10 text-center">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-1 text-sm font-bold text-foreground/80 hover:text-foreground underline underline-offset-4"
+            >
+              Voir tous les détails et la FAQ
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
         </div>
       </section>

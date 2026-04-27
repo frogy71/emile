@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateProposal } from "@/lib/ai/proposal";
 import { createClient } from "@supabase/supabase-js";
-import { getPlanState } from "@/lib/billing";
+import { getPlan } from "@/lib/plan";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 function getSupabase() {
@@ -25,15 +25,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Paywall — free tier is capped at FREE_PROPOSAL_LIMIT proposals. Returning
-    // 402 Payment Required is semantic + our UI can react distinctly to upsell.
-    const plan = await getPlanState(organizationId);
+    // Paywall — free tier can't generate proposals at all; pro is capped at
+    // 5 / month; expert is unlimited. Returning 402 Payment Required is
+    // semantic + our UI reacts distinctly to upsell.
+    const plan = await getPlan(organizationId);
     if (!plan.canGenerateProposal) {
+      const message =
+        plan.tier === "free"
+          ? "La génération de dossier IA est réservée aux plans Pro et Expert. Passez à Pro pour générer 5 dossiers / mois."
+          : `Tu as utilisé ${plan.proposalsUsed}/${plan.limits.proposalsPerMonth} dossiers ce mois-ci. Passe en Expert pour des dossiers illimités.`;
       return NextResponse.json(
         {
           error: "proposal_limit_reached",
-          message: `Tu as utilisé ${plan.proposalsUsed}/${plan.proposalsLimit} propositions du plan gratuit. Passe en Pro pour en générer sans limite.`,
-          plan,
+          message,
+          plan: {
+            tier: plan.tier,
+            proposalsUsed: plan.proposalsUsed,
+            proposalsLimit: plan.limits.proposalsPerMonth,
+          },
         },
         { status: 402 }
       );

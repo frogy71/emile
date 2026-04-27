@@ -25,6 +25,7 @@ import Link from "next/link";
 import { ProjectActions } from "@/components/project-actions";
 import { MatchButton } from "@/components/match-button";
 import { ProjectMatches } from "@/components/project-matches";
+import { resolveTier } from "@/lib/plan";
 
 export default async function ProjectDetailPage({
   params,
@@ -42,13 +43,19 @@ export default async function ProjectDetailPage({
   // Fetch project and verify ownership
   const { data: project, error } = await supabaseAdmin
     .from("projects")
-    .select("*, organizations!inner(user_id)")
+    .select("*, organizations!inner(user_id, plan, plan_status)")
     .eq("id", id)
     .single();
 
   if (!project || error || (project.organizations as unknown as { user_id: string })?.user_id !== user.id) {
     notFound();
   }
+
+  const orgInfo = project.organizations as unknown as {
+    plan?: string | null;
+    plan_status?: string | null;
+  };
+  const tier = resolveTier(orgInfo?.plan, orgInfo?.plan_status);
 
   // Fetch linked proposals and match scores in parallel
   const [{ data: proposals }, { data: matchScores }] = await Promise.all([
@@ -305,7 +312,7 @@ export default async function ProjectDetailPage({
             </CardContent>
           </Card>
         ) : (
-          <ProjectMatches matches={matchList} projectId={project.id} />
+          <ProjectMatches matches={matchList} projectId={project.id} tier={tier} />
         )}
       </div>
 

@@ -155,8 +155,8 @@ interface AdminStats {
   };
   organizations: {
     total: number;
-    monthlyActive: number;
-    annualActive: number;
+    proActive: number;
+    expertActive: number;
   };
   projects: {
     total: number;
@@ -513,15 +513,15 @@ export default function AdminDashboard() {
           <div className="grid gap-4 md:grid-cols-3 mb-8">
             <div className="rounded-2xl border-2 border-border bg-[#ffa3d1] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
               <p className="text-2xl font-black">
-                {stats?.organizations.monthlyActive || 0}
+                {stats?.organizations.proActive || 0}
               </p>
-              <p className="text-xs font-bold">Abonnés mensuels (79&euro;/mois)</p>
+              <p className="text-xs font-bold">Abonnés Pro (79&euro;/mois)</p>
             </div>
             <div className="rounded-2xl border-2 border-border bg-[#d4b5ff] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
               <p className="text-2xl font-black">
-                {stats?.organizations.annualActive || 0}
+                {stats?.organizations.expertActive || 0}
               </p>
-              <p className="text-xs font-bold">Abonnés annuels (59&euro;/mois)</p>
+              <p className="text-xs font-bold">Abonnés Expert (199&euro;/mois)</p>
             </div>
             <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
               <p className="text-2xl font-black">

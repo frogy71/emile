@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     case "checkout.session.completed": {
       const session = event.data.object;
       const userId = session.metadata?.user_id;
-      const plan = session.metadata?.plan || "monthly";
+      const plan = session.metadata?.plan || "pro";
       const nowIso = new Date().toISOString();
 
       if (userId) {

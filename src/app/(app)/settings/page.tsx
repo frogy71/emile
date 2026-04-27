@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Bell, CreditCard, Check, Sparkles, Loader2, FileText, ExternalLink } from "lucide-react";
+import { Bell, CreditCard, Check, Sparkles, Loader2, FileText, ExternalLink, Crown } from "lucide-react";
 
 export default function SettingsPage() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -15,7 +15,7 @@ export default function SettingsPage() {
   const [alertSaved, setAlertSaved] = useState(false);
   const [savingAlerts, setSavingAlerts] = useState(false);
 
-  async function handleCheckout(plan: "monthly" | "annual") {
+  async function handleCheckout(plan: "pro" | "expert") {
     setLoadingPlan(plan);
     try {
       const res = await fetch("/api/stripe/checkout", {
@@ -130,81 +130,122 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-2xl border-2 border-border bg-card p-6 shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-2xl font-black">Emile Pro</h3>
-                    <Badge variant="green">
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      Recommandé
-                    </Badge>
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Pro */}
+              <div className="relative rounded-2xl border-4 border-foreground bg-[#ffe066] p-6 shadow-[6px_6px_0px_0px_#1a1a1a]">
+                <Badge
+                  variant="default"
+                  className="absolute -top-3 left-1/2 -translate-x-1/2 bg-foreground text-background px-3 py-1 text-[10px] font-black whitespace-nowrap"
+                >
+                  Le plus populaire
+                </Badge>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-2xl font-black">Pro</h3>
+                      <Badge variant="green">
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        Illimité
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-foreground/80 font-medium">
+                      Pour les associations qui répondent régulièrement.
+                    </p>
                   </div>
-                  <p className="mt-1 text-muted-foreground font-medium">
-                    Accès complet à Emile pour votre organisation
-                  </p>
+                  <div className="text-right">
+                    <p className="text-3xl font-black">79€</p>
+                    <p className="text-xs text-foreground/70 font-bold">/mois HT</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-4xl font-black">79€</p>
-                  <p className="text-sm text-muted-foreground font-bold">/mois HT</p>
-                </div>
+
+                <ul className="mt-5 space-y-2">
+                  {[
+                    "Matchings illimités",
+                    "Top 50 résultats",
+                    "5 dossiers IA / mois",
+                    "Alertes intelligentes",
+                    "Feedback learning",
+                    "Export DOCX + support email",
+                  ].map((feature) => (
+                    <li key={feature} className="flex items-center gap-2 text-sm font-semibold">
+                      <Check className="h-4 w-4 text-foreground" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+
+                <Button
+                  variant="default"
+                  className="w-full mt-6"
+                  onClick={() => handleCheckout("pro")}
+                  disabled={!!loadingPlan}
+                >
+                  {loadingPlan === "pro" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  Passer Pro — 79€/mois HT
+                </Button>
               </div>
 
-              <div className="mt-6 grid gap-2 md:grid-cols-2">
-                {[
-                  "Catalogue exhaustif France + UE",
-                  "Matching IA illimité (GrantScore)",
-                  "Alertes email personnalisées",
-                  "Génération de propositions IA",
-                  "Projets illimités",
-                  "Export des brouillons (.docx)",
-                  "3 000+ subventions surveillées",
-                  "Support prioritaire",
-                ].map((feature) => (
-                  <div key={feature} className="flex items-center gap-2 text-sm font-semibold">
-                    <Check className="h-4 w-4 text-[#c8f76f]" />
-                    {feature}
+              {/* Expert */}
+              <div className="rounded-2xl border-2 border-border bg-[#a3d5ff] p-6 shadow-[4px_4px_0px_0px_#1a1a1a]">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-2xl font-black">Expert</h3>
+                      <Badge variant="default">
+                        <Crown className="h-3 w-3 mr-1" />
+                        Premium
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-foreground/80 font-medium">
+                      Pour les structures à activité quotidienne.
+                    </p>
                   </div>
-                ))}
-              </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-black">199€</p>
+                    <p className="text-xs text-foreground/70 font-bold">/mois HT</p>
+                  </div>
+                </div>
 
-              <div className="mt-6 grid gap-3 md:grid-cols-2">
+                <ul className="mt-5 space-y-2">
+                  {[
+                    "Tout illimité",
+                    "Dossiers IA illimités",
+                    "Accès prioritaire aux nouvelles subventions",
+                    "Dashboard analytics avancé",
+                    "Support prioritaire",
+                    "Multi-projets illimité",
+                  ].map((feature) => (
+                    <li key={feature} className="flex items-center gap-2 text-sm font-semibold">
+                      <Check className="h-4 w-4 text-foreground" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+
                 <Button
                   variant="outline"
-                  className="w-full"
-                  onClick={() => handleCheckout("monthly")}
+                  className="w-full mt-6"
+                  onClick={() => handleCheckout("expert")}
                   disabled={!!loadingPlan}
                 >
-                  {loadingPlan === "monthly" ? (
+                  {loadingPlan === "expert" ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
-                  Mensuel — 79€/mois HT
-                </Button>
-                <Button
-                  variant="accent"
-                  className="w-full"
-                  onClick={() => handleCheckout("annual")}
-                  disabled={!!loadingPlan}
-                >
-                  {loadingPlan === "annual" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
-                  Annuel — 59€/mois HT
-                  <Badge variant="default" className="ml-2 bg-foreground text-background text-[10px]">
-                    -25%
-                  </Badge>
+                  ) : (
+                    <Crown className="h-4 w-4" />
+                  )}
+                  Choisir Expert — 199€/mois HT
                 </Button>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground text-center">
-                Annuel : 708€/an au lieu de 948€ — Économisez 240€
-              </p>
-
-              <p className="mt-3 text-xs text-muted-foreground text-center">
-                Paiement sécurisé via Stripe. Annulation possible à tout moment.
-                <br />
-                Une subvention décrochée rembourse des années d&apos;abonnement.
-              </p>
             </div>
+
+            <p className="mt-4 text-xs text-muted-foreground text-center">
+              Paiement sécurisé via Stripe. Annulation possible à tout moment.
+              Associations loi 1901 : TVA non applicable.
+            </p>
           </CardContent>
         </Card>
 

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Loader2, CheckCircle } from "lucide-react";
+import { UpgradeModal } from "@/components/upgrade-modal";
 
 interface MatchButtonProps {
   projectId: string;
@@ -19,6 +20,7 @@ export function MatchButton({ projectId }: MatchButtonProps) {
     goodMatches: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paywallMessage, setPaywallMessage] = useState<string | null>(null);
 
   const handleMatch = async () => {
     setLoading(true);
@@ -29,6 +31,13 @@ export function MatchButton({ projectId }: MatchButtonProps) {
         method: "POST",
       });
       const data = await res.json();
+      if (res.status === 402) {
+        setPaywallMessage(
+          data?.message ||
+            "Tu as utilisé tes 3 matchings gratuits ce mois-ci. Passe en Pro pour des matchings illimités."
+        );
+        return;
+      }
       if (!res.ok) {
         throw new Error(data.error || "Erreur lors du matching");
       }
@@ -73,6 +82,16 @@ export function MatchButton({ projectId }: MatchButtonProps) {
         </p>
       )}
       {error && <p className="text-sm font-bold text-red-600">{error}</p>}
+      <UpgradeModal
+        open={paywallMessage !== null}
+        onClose={() => setPaywallMessage(null)}
+        title="Vous avez utilisé vos 3 matchings gratuits ce mois-ci"
+        message={
+          paywallMessage ||
+          "Passez à Pro pour des matchings illimités, top 50 résultats et 5 dossiers IA / mois."
+        }
+        highlightedTier="pro"
+      />
     </div>
   );
 }

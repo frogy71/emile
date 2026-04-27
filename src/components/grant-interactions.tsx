@@ -2,8 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bookmark, Loader2, Send, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import {
+  Bookmark,
+  Loader2,
+  Lock,
+  Send,
+  ThumbsDown,
+  ThumbsUp,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UpgradeModal } from "@/components/upgrade-modal";
 
 /**
  * Tinder-style feedback row for a grant. Renders icon-only buttons (with
@@ -19,6 +28,11 @@ import { cn } from "@/lib/utils";
  * state persists for the rest of the page lifetime so users see what they
  * voted on (full hydration across pages comes from /api/grants/preferences,
  * which the parent server component can use to seed `initialActive`).
+ *
+ * Free users see grayed buttons with a small "Pro" overlay; clicking opens
+ * the upgrade modal. Feedback learning is a Pro+ feature because it is the
+ * mechanism through which the matching pipeline personalises results — we
+ * don't capture or apply signals from free users.
  */
 
 export type InteractionType =
@@ -40,6 +54,8 @@ interface GrantInteractionsProps {
    */
   refreshOnSuccess?: boolean;
   className?: string;
+  /** "free" disables the buttons and surfaces the upgrade modal on click. */
+  tier?: "free" | "pro" | "expert";
 }
 
 const POSITIVE: ReadonlySet<InteractionType> = new Set([
@@ -111,6 +127,7 @@ export function GrantInteractions({
   initialActive = [],
   refreshOnSuccess = false,
   className,
+  tier = "free",
 }: GrantInteractionsProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -120,10 +137,16 @@ export function GrantInteractions({
   const [pending, setPending] = useState<InteractionType | null>(null);
   const [popping, setPopping] = useState<InteractionType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paywallOpen, setPaywallOpen] = useState(false);
 
+  const isFree = tier === "free";
   const buttons = layout === "card" ? CARD_BUTTONS : DETAIL_BUTTONS;
 
   const handle = async (type: InteractionType) => {
+    if (isFree) {
+      setPaywallOpen(true);
+      return;
+    }
     if (pending) return;
     setPending(type);
     setError(null);
@@ -177,39 +200,63 @@ export function GrantInteractions({
       )}
     >
       {buttons.map(({ type, label, Icon, activeColor, hoverColor }) => {
-        const isActive = active.has(type);
+        const isActive = !isFree && active.has(type);
         const isPopping = popping === type;
         const isPending = pending === type;
+        const buttonLabel = isFree ? `${label} (réservé Pro)` : label;
         return (
           <button
             key={type}
             type="button"
-            aria-label={label}
+            aria-label={buttonLabel}
             aria-pressed={isActive}
             disabled={isPending}
             onClick={() => handle(type)}
             className={cn(
-              "inline-flex items-center justify-center rounded-xl border-2 border-border font-bold shadow-[2px_2px_0px_0px_#1a1a1a] transition-all",
+              "relative inline-flex items-center justify-center rounded-xl border-2 border-border font-bold shadow-[2px_2px_0px_0px_#1a1a1a] transition-all",
               sizeClasses,
-              isActive ? activeColor : `bg-background ${hoverColor}`,
-              "hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#1a1a1a]",
-              "active:translate-x-0 active:translate-y-0 active:shadow-[1px_1px_0px_0px_#1a1a1a]",
+              isFree
+                ? "bg-secondary/60 text-muted-foreground cursor-pointer hover:bg-secondary"
+                : isActive
+                  ? activeColor
+                  : `bg-background ${hoverColor}`,
+              !isFree &&
+                "hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#1a1a1a]",
+              !isFree &&
+                "active:translate-x-0 active:translate-y-0 active:shadow-[1px_1px_0px_0px_#1a1a1a]",
               isPopping && "scale-110",
               isPending && "opacity-70 cursor-wait"
             )}
-            title={label}
+            title={buttonLabel}
           >
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Icon className="h-4 w-4" />
             )}
+            {isFree && (
+              <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-border bg-foreground">
+                <Lock className="h-2 w-2 text-background" />
+              </span>
+            )}
           </button>
         );
       })}
+      {isFree && (
+        <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+          Pro
+        </span>
+      )}
       {error && (
         <span className="text-[10px] font-bold text-red-700">{error}</span>
       )}
+      <UpgradeModal
+        open={paywallOpen}
+        onClose={() => setPaywallOpen(false)}
+        title="Le feedback learning est une fonctionnalité Pro"
+        message="Vos likes et dislikes améliorent les matchings suivants. Passez à Pro pour activer le feedback learning."
+        highlightedTier="pro"
+      />
     </div>
   );
 }

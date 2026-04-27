@@ -11,7 +11,113 @@ import {
   BarChart3,
   Sparkles,
   Check,
+  X,
 } from "lucide-react";
+
+type CellIcon = "check" | "cross" | null;
+type ComparisonCell = { icon: CellIcon; text: string };
+type ComparisonRow = {
+  label: string;
+  emile: ComparisonCell;
+  aidesTerritoires: ComparisonCell;
+  welcomeEurope: ComparisonCell;
+  subventionsFr: ComparisonCell;
+};
+
+const COMPARISON_ROWS: ComparisonRow[] = [
+  {
+    label: "Subventions indexées",
+    emile: { icon: null, text: "5 700+ FR + UE + Fondations" },
+    aidesTerritoires: { icon: null, text: "~4 000 (publiques FR)" },
+    welcomeEurope: { icon: null, text: "UE uniquement" },
+    subventionsFr: { icon: null, text: "~2 000" },
+  },
+  {
+    label: "Matching IA personnalisé",
+    emile: { icon: "check", text: "Embeddings sémantiques + feedback" },
+    aidesTerritoires: { icon: "cross", text: "Filtres manuels" },
+    welcomeEurope: { icon: "cross", text: "Filtres manuels" },
+    subventionsFr: { icon: "cross", text: "Filtres manuels" },
+  },
+  {
+    label: "Génération de dossiers IA",
+    emile: { icon: "check", text: "Brouillon complet auto-généré" },
+    aidesTerritoires: { icon: "cross", text: "—" },
+    welcomeEurope: { icon: "cross", text: "—" },
+    subventionsFr: { icon: "cross", text: "—" },
+  },
+  {
+    label: "Fondations privées",
+    emile: { icon: "check", text: "200+ portails crawlés" },
+    aidesTerritoires: { icon: "cross", text: "—" },
+    welcomeEurope: { icon: "cross", text: "—" },
+    subventionsFr: { icon: "cross", text: "—" },
+  },
+  {
+    label: "Alertes intelligentes",
+    emile: { icon: "check", text: "Basées sur le score de matching" },
+    aidesTerritoires: { icon: "check", text: "Basiques" },
+    welcomeEurope: { icon: "cross", text: "—" },
+    subventionsFr: { icon: "cross", text: "—" },
+  },
+  {
+    label: "Sources européennes",
+    emile: { icon: "check", text: "SEDIA + Erasmus+ + Interreg + EEA" },
+    aidesTerritoires: { icon: "cross", text: "—" },
+    welcomeEurope: { icon: "check", text: "Couverture UE" },
+    subventionsFr: { icon: "cross", text: "Limité" },
+  },
+  {
+    label: "Apprentissage continu",
+    emile: { icon: "check", text: "S'améliore à chaque interaction" },
+    aidesTerritoires: { icon: "cross", text: "—" },
+    welcomeEurope: { icon: "cross", text: "—" },
+    subventionsFr: { icon: "cross", text: "—" },
+  },
+  {
+    label: "Prix",
+    emile: { icon: null, text: "Gratuit pour commencer" },
+    aidesTerritoires: { icon: null, text: "Gratuit" },
+    welcomeEurope: { icon: null, text: "150–300 €/mois" },
+    subventionsFr: { icon: null, text: "Gratuit (limité)" },
+  },
+];
+
+function ComparisonCellContent({
+  cell,
+  highlight = false,
+}: {
+  cell: ComparisonCell;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-2">
+      {cell.icon === "check" && (
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-md border-2 border-border ${
+            highlight ? "bg-card" : "bg-[#c8f76f]"
+          }`}
+        >
+          <Check className="h-4 w-4" strokeWidth={3} />
+        </span>
+      )}
+      {cell.icon === "cross" && (
+        <span className="flex h-7 w-7 items-center justify-center rounded-md border-2 border-border bg-card">
+          <X className="h-4 w-4 text-rose-500" strokeWidth={3} />
+        </span>
+      )}
+      <span
+        className={`text-xs leading-snug ${
+          cell.icon === "cross"
+            ? "font-medium text-muted-foreground"
+            : "font-semibold"
+        }`}
+      >
+        {cell.text}
+      </span>
+    </div>
+  );
+}
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://grant-finder-kappa.vercel.app";
@@ -248,6 +354,100 @@ export default function LandingPage() {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Comparison */}
+      <section className="border-t-2 border-border py-20">
+        <div className="mx-auto max-w-6xl px-6">
+          <h2 className="text-4xl font-black text-foreground">
+            Pourquoi Emile&nbsp;?
+          </h2>
+          <p className="mt-2 text-lg text-muted-foreground font-medium">
+            Comparez. Choisissez. Décrochez.
+          </p>
+
+          <div className="mt-14 overflow-x-auto rounded-2xl border-2 border-border bg-card shadow-[4px_4px_0px_0px_#1a1a1a]">
+            <table className="w-full min-w-[820px] border-collapse">
+              <colgroup>
+                <col className="w-[22%]" />
+                <col className="w-[28%]" />
+                <col className="w-[16.66%]" />
+                <col className="w-[16.66%]" />
+                <col className="w-[16.66%]" />
+              </colgroup>
+              <thead>
+                <tr className="border-b-2 border-border">
+                  <th className="p-5 text-left text-xs font-black uppercase tracking-wide align-bottom">
+                    Critère
+                  </th>
+                  <th className="relative p-5 text-center align-bottom bg-[#c8f76f] border-x-2 border-border">
+                    <Badge
+                      variant="default"
+                      className="absolute -top-3 left-1/2 -translate-x-1/2 bg-foreground text-background px-3 py-1 text-[10px] font-black"
+                    >
+                      Recommandé
+                    </Badge>
+                    <span className="inline-flex items-baseline text-xl font-black tracking-tight">
+                      Emile
+                      <span className="ml-1 rounded-md bg-foreground px-1.5 py-0 text-base text-[#c8f76f]">
+                        .
+                      </span>
+                    </span>
+                  </th>
+                  <th className="p-5 text-center text-sm font-black align-bottom">
+                    Aides-Territoires
+                  </th>
+                  <th className="p-5 text-center text-sm font-black align-bottom">
+                    WelcomeEurope
+                  </th>
+                  <th className="p-5 text-center text-sm font-black align-bottom">
+                    Subventions.fr
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARISON_ROWS.map((row, idx) => {
+                  const isLast = idx === COMPARISON_ROWS.length - 1;
+                  return (
+                    <tr
+                      key={row.label}
+                      className={isLast ? "" : "border-b-2 border-border"}
+                    >
+                      <td className="p-5 text-sm font-bold align-top">
+                        {row.label}
+                      </td>
+                      <td className="p-5 align-top text-center bg-[#c8f76f] border-x-2 border-border">
+                        <ComparisonCellContent cell={row.emile} highlight />
+                      </td>
+                      <td className="p-5 align-top text-center">
+                        <ComparisonCellContent cell={row.aidesTerritoires} />
+                      </td>
+                      <td className="p-5 align-top text-center">
+                        <ComparisonCellContent cell={row.welcomeEurope} />
+                      </td>
+                      <td className="p-5 align-top text-center">
+                        <ComparisonCellContent cell={row.subventionsFr} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="mt-4 text-xs text-muted-foreground font-medium md:hidden">
+            Faites glisser horizontalement pour comparer →
+          </p>
+
+          <div className="mt-10 flex justify-center">
+            <Link href="/signup">
+              <Button variant="default" size="lg">
+                Commencer gratuitement
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

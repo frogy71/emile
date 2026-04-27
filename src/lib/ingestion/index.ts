@@ -57,6 +57,22 @@ import {
   fetchExtraFoundations,
   transformExtraFoundationToGrant,
 } from "./fondations-extra";
+import { fetchFrance2030Programs, transformFrance2030ToGrant } from "./france-2030";
+import { fetchHorizonPrograms, transformHorizonToGrant } from "./horizon-europe";
+import {
+  fetchCreativeEuropePrograms,
+  transformCreativeEuropeToGrant,
+} from "./creative-europe";
+import { fetchDGEchoPrograms, transformDGEchoToGrant } from "./dg-echo";
+import { fetchDRACPrograms, transformDRACToGrant } from "./drac";
+import { fetchARSPrograms, transformARSToGrant } from "./ars";
+import { fetchBelgiumPrograms, transformBelgiumToGrant } from "./belgium";
+import { fetchSwissPrograms, transformSwissToGrant } from "./switzerland";
+import {
+  fetchMecenatPrograms,
+  transformMecenatToGrant,
+} from "./mecenat-entreprise";
+import { fetchPrixPrograms, transformPrixToGrant } from "./prix-concours";
 import {
   buildGrantEmbeddingText,
   generateEmbeddingsBatch,
@@ -621,6 +637,86 @@ const SOURCES: SourceSpec[] = [
     run: async () => {
       const raw = await fetchExtraFoundations();
       return raw.map(transformExtraFoundationToGrant);
+    },
+  },
+  {
+    name: "France 2030",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchFrance2030Programs();
+      return raw.map(transformFrance2030ToGrant);
+    },
+  },
+  {
+    name: "Horizon Europe / CORDIS",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchHorizonPrograms();
+      return raw.map(transformHorizonToGrant);
+    },
+  },
+  {
+    name: "Creative Europe",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchCreativeEuropePrograms();
+      return raw.map(transformCreativeEuropeToGrant);
+    },
+  },
+  {
+    name: "DG ECHO — EU Humanitarian Aid",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchDGEchoPrograms();
+      return raw.map(transformDGEchoToGrant);
+    },
+  },
+  {
+    name: "DRAC — Directions Régionales des Affaires Culturelles",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchDRACPrograms();
+      return raw.map(transformDRACToGrant);
+    },
+  },
+  {
+    name: "ARS — Agences Régionales de Santé",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchARSPrograms();
+      return raw.map(transformARSToGrant);
+    },
+  },
+  {
+    name: "Belgique (Wallonie + Bruxelles)",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchBelgiumPrograms();
+      return raw.map(transformBelgiumToGrant);
+    },
+  },
+  {
+    name: "Suisse (DDC + fondations)",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchSwissPrograms();
+      return raw.map(transformSwissToGrant);
+    },
+  },
+  {
+    name: "Mécénat d'entreprise",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchMecenatPrograms();
+      return raw.map(transformMecenatToGrant);
+    },
+  },
+  {
+    name: "Prix et concours",
+    cadence: "weekly",
+    run: async () => {
+      const raw = await fetchPrixPrograms();
+      return raw.map(transformPrixToGrant);
     },
   },
 ];

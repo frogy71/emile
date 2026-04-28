@@ -11,7 +11,6 @@ import {
   BarChart3,
   Sparkles,
   Check,
-  Crown,
   X,
 } from "lucide-react";
 
@@ -201,9 +200,9 @@ export default function LandingPage() {
                 Connexion
               </Button>
             </Link>
-            <Link href="/signup">
+            <Link href="/try">
               <Button variant="accent" size="sm">
-                Essai gratuit
+                Trouver mes subventions
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
@@ -231,9 +230,9 @@ export default function LandingPage() {
             Emile surveille, classe et vous aide à décrocher vos financements.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
-            <Link href="/signup">
+            <Link href="/try">
               <Button variant="default" size="lg">
-                Commencer gratuitement
+                Trouvez vos subventions
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
@@ -244,60 +243,88 @@ export default function LandingPage() {
             </Link>
           </div>
           <p className="mt-4 text-sm font-bold text-muted-foreground">
-            Gratuit · aucune carte · ~2 800 appels à projets FR + UE indexés
+            Sans carte bancaire · 5 700+ appels à projets FR &amp; UE indexés
           </p>
         </div>
       </section>
 
-      {/* How it works */}
+      {/* How it works — mirrors the actual conversion funnel:
+          describe project → create account → see matches. The previous
+          Track/Match/Win framing was too abstract for first-time
+          visitors and didn't tell them *what they have to do*. */}
       <section
         id="how-it-works"
         className="border-t-2 border-border py-20"
       >
         <div className="mx-auto max-w-6xl px-6">
           <h2 className="text-4xl font-black text-foreground">
-            Track. Match. Win.
+            Trois étapes. Vos premières subventions en 2 minutes.
           </h2>
           <p className="mt-2 text-lg text-muted-foreground font-medium">
-            Trois étapes. Zéro prise de tête.
+            Pas de démo, pas d&apos;appel commercial. Vous décrivez, on
+            matche.
           </p>
 
           <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {/* Track */}
+            {/* 1. Décrivez votre projet */}
             <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-7 shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-border bg-card">
-                <Search className="h-6 w-6" />
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-lg font-black">
+                  1
+                </span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-border bg-card">
+                  <FileText className="h-6 w-6" />
+                </div>
               </div>
-              <h3 className="mt-5 text-2xl font-black">Track</h3>
+              <h3 className="mt-5 text-2xl font-black">Décrivez votre projet</h3>
               <p className="mt-2 text-sm font-semibold">
-                Surveillance automatique des appels à projets français et
-                européens. Alertes avant les deadlines. Résumés IA.
+                Six champs : nom, description, bénéficiaires, thématiques,
+                géographie, budget. Quelques phrases suffisent.
               </p>
             </div>
 
-            {/* Match */}
+            {/* 2. Créez votre compte */}
             <div className="rounded-2xl border-2 border-border bg-[#ffe066] p-7 shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-border bg-card">
-                <Target className="h-6 w-6" />
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-lg font-black">
+                  2
+                </span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-border bg-card">
+                  <Sparkles className="h-6 w-6" />
+                </div>
               </div>
-              <h3 className="mt-5 text-2xl font-black">Match</h3>
+              <h3 className="mt-5 text-2xl font-black">Créez votre compte</h3>
               <p className="mt-2 text-sm font-semibold">
-                Score de compatibilité entre votre profil et chaque
-                subvention. Classement par pertinence. Explication claire.
+                Email ou Google, 30 secondes. Sans carte bancaire. Vos
+                données restent privées.
               </p>
             </div>
 
-            {/* Win */}
+            {/* 3. Découvrez vos matchs */}
             <div className="rounded-2xl border-2 border-border bg-[#ffa3d1] p-7 shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-border bg-card">
-                <FileText className="h-6 w-6" />
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-lg font-black">
+                  3
+                </span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-border bg-card">
+                  <Target className="h-6 w-6" />
+                </div>
               </div>
-              <h3 className="mt-5 text-2xl font-black">Win</h3>
+              <h3 className="mt-5 text-2xl font-black">Découvrez vos matchs</h3>
               <p className="mt-2 text-sm font-semibold">
-                Générez un brouillon de proposition structuré et adapté au
-                bailleur. En quelques minutes, pas en semaines.
+                Notre IA classe les subventions les plus pertinentes par
+                score de compatibilité, avec une explication claire.
               </p>
             </div>
+          </div>
+
+          <div className="mt-10">
+            <Link href="/try">
+              <Button variant="default" size="lg">
+                Lancer ma recherche
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -450,110 +477,11 @@ export default function LandingPage() {
           </p>
 
           <div className="mt-10 flex justify-center">
-            <Link href="/signup">
+            <Link href="/try">
               <Button variant="default" size="lg">
-                Commencer gratuitement
+                Trouvez vos subventions
                 <ArrowRight className="h-4 w-4" />
               </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing teaser */}
-      <section id="pricing" className="border-t-2 border-border py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <h2 className="text-4xl font-black text-foreground text-center">
-            À partir de 0€.
-          </h2>
-          <p className="mt-3 text-center text-muted-foreground font-medium max-w-2xl mx-auto">
-            Trois plans pour s&apos;adapter à votre rythme — du test à la production.
-          </p>
-          <p className="mt-2 text-center text-xs text-muted-foreground">
-            Prix HT — TVA non applicable pour les associations (article 261-7-1° du CGI)
-          </p>
-
-          <div className="mt-12 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto items-start">
-            {/* Gratuit */}
-            <div className="rounded-2xl border-2 border-border bg-card p-7 shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-black">Gratuit</h3>
-                <Badge variant="secondary">Découverte</Badge>
-              </div>
-              <p className="mt-4">
-                <span className="text-4xl font-black">0€</span>
-                <span className="text-muted-foreground font-bold"> / pour toujours</span>
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground font-medium">
-                3 matchings/mois, top 5 résultats. Aucune carte.
-              </p>
-              <Link href="/signup">
-                <Button variant="outline" size="lg" className="mt-6 w-full">
-                  Créer mon compte
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
-
-            {/* Pro — highlighted */}
-            <div className="rounded-2xl border-4 border-foreground bg-[#ffe066] p-7 shadow-[8px_8px_0px_0px_#1a1a1a] relative md:-mt-2">
-              <Badge variant="default" className="absolute -top-3 left-1/2 -translate-x-1/2 bg-foreground text-background px-3 py-1 text-xs font-black whitespace-nowrap">
-                Le plus populaire
-              </Badge>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-black">Pro</h3>
-                <Badge variant="green">Illimité</Badge>
-              </div>
-              <p className="mt-4">
-                <span className="text-4xl font-black">79€</span>
-                <span className="font-bold">/mois HT</span>
-              </p>
-              <p className="mt-2 text-sm font-medium text-foreground/80">
-                Matchings illimités, 5 dossiers IA/mois, alertes intelligentes.
-              </p>
-              <Link href="/signup?plan=pro">
-                <Button variant="default" size="lg" className="mt-6 w-full">
-                  <Sparkles className="h-4 w-4" />
-                  Démarrer Pro
-                </Button>
-              </Link>
-              <p className="mt-2 text-center text-[11px] font-bold text-foreground/70">
-                Essai sans carte · annulable à tout moment
-              </p>
-            </div>
-
-            {/* Expert */}
-            <div className="rounded-2xl border-2 border-border bg-[#a3d5ff] p-7 shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-black">Expert</h3>
-                <Badge variant="default">
-                  <Crown className="h-3 w-3 mr-1" />
-                  Premium
-                </Badge>
-              </div>
-              <p className="mt-4">
-                <span className="text-4xl font-black">199€</span>
-                <span className="font-bold">/mois HT</span>
-              </p>
-              <p className="mt-2 text-sm font-medium text-foreground/80">
-                Tout illimité, dashboard analytics, support prioritaire.
-              </p>
-              <Link href="/signup?plan=expert">
-                <Button variant="outline" size="lg" className="mt-6 w-full">
-                  <Crown className="h-4 w-4" />
-                  Choisir Expert
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          <div className="mt-10 text-center">
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-1 text-sm font-bold text-foreground/80 hover:text-foreground underline underline-offset-4"
-            >
-              Voir tous les détails et la FAQ
-              <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>

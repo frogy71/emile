@@ -24,6 +24,13 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // When the user reaches login from the /try funnel (existing account
+  // with a pending project in localStorage), we route them through
+  // /auth/post-signup so the project gets created before they hit the
+  // dashboard. Defaults to /dashboard for the normal login path.
+  const fromTry = searchParams.get("from") === "try";
+  const postAuthPath = fromTry ? "/auth/post-signup" : "/dashboard";
+
   useEffect(() => {
     if (searchParams.get("error") === "auth") {
       setError("Erreur d'authentification. Veuillez réessayer.");
@@ -47,7 +54,7 @@ function LoginForm() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(postAuthPath);
     router.refresh();
   }
 
@@ -56,7 +63,7 @@ function LoginForm() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(postAuthPath)}`,
       },
     });
     if (error) {

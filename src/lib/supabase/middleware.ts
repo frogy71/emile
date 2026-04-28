@@ -41,8 +41,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Redirect unauthenticated users to login (except public routes)
-  const publicRoutes = ["/", "/login", "/signup", "/pricing", "/auth/callback"];
+  // Redirect unauthenticated users to login (except public routes).
+  // /try and /essai are the conversion-funnel entry points: a public
+  // project form that defers signup until *after* the user has invested
+  // in describing their project. We deliberately keep these routes open
+  // so the form is the very first thing prospects see.
+  const publicRoutes = ["/", "/login", "/signup", "/pricing", "/try", "/essai", "/auth/callback"];
   // Public API routes (webhooks, cron jobs, ingestion)
   const publicApiRoutes = ["/api/stripe/webhook", "/api/alerts", "/api/alerts/send", "/api/ingest", "/api/cron"];
   const isPublicRoute = publicRoutes.some(

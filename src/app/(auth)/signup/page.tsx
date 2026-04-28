@@ -1,14 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
+  );
+}
+
+function SignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -17,6 +27,19 @@ export default function SignupPage() {
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Came from /try — they've already filled the project form. We adjust
+  // the copy and route them through /auth/post-signup so the pending
+  // project gets created server-side and they land on matches.
+  const fromTry = searchParams.get("from") === "try";
+
+  // Where to send the user post-auth. /auth/post-signup is a thin client
+  // shim that picks up the localStorage payload (if any) and posts it to
+  // /api/projects before forwarding to the project detail page. Safe to
+  // use even when there's no pending project — it falls through to the
+  // dashboard.
+  const postAuthPath = "/auth/post-signup";
 
   async function handleResendConfirmation() {
     if (!email) return;
@@ -27,7 +50,7 @@ export default function SignupPage() {
       type: "signup",
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(postAuthPath)}`,
       },
     });
     setResending(false);
@@ -46,7 +69,9 @@ export default function SignupPage() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // Pass next= so the email-confirmation link comes back through
+        // /auth/callback → post-signup, not straight to /dashboard.
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(postAuthPath)}`,
       },
     });
 
@@ -56,15 +81,20 @@ export default function SignupPage() {
       return;
     }
 
-    // If session exists, user is logged in (email confirmation disabled)
     if (data.session) {
-      router.push("/dashboard");
+      // Email confirmation disabled — we already have a session, so jump
+      // straight to the post-signup flow which will pick up any pending
+      // project from localStorage.
+      router.push(postAuthPath);
       router.refresh();
     } else {
-      // Email confirmation required — show message
       setError("");
       setLoading(false);
-      setSuccess("Compte créé ! Vérifiez votre email pour confirmer votre inscription.");
+      setSuccess(
+        fromTry
+          ? "Compte créé ! Vérifiez votre email pour découvrir vos subventions."
+          : "Compte créé ! Vérifiez votre email pour confirmer votre inscription."
+      );
     }
   }
 
@@ -73,7 +103,9 @@ export default function SignupPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        // Google bounces back through /auth/callback — pass next= so it
+        // forwards to /auth/post-signup instead of straight to /dashboard.
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(postAuthPath)}`,
       },
     });
     if (error) {
@@ -89,13 +121,22 @@ export default function SignupPage() {
           <Link href="/" className="text-xl font-bold text-foreground">
             Emile<span className="text-[#c8f76f] bg-foreground px-1.5 py-0.5 rounded-lg ml-1 text-base">.</span>
           </Link>
-          <CardTitle className="mt-4">Créer un compte</CardTitle>
+          {fromTry && (
+            <Badge variant="green" className="mx-auto mt-3 px-3 py-1 text-xs">
+              <Sparkles className="h-3 w-3 mr-1" />
+              Étape 2/2 — Créez votre compte
+            </Badge>
+          )}
+          <CardTitle className="mt-4">
+            {fromTry ? "Une dernière étape." : "Créer un compte"}
+          </CardTitle>
           <CardDescription>
-            Commencez à trouver vos subventions en quelques minutes
+            {fromTry
+              ? "Créez votre compte pour voir vos résultats — 30 secondes, sans carte."
+              : "Commencez à trouver vos subventions en quelques minutes"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Google OAuth */}
           <Button
             type="button"
             variant="outline"
@@ -188,12 +229,19 @@ export default function SignupPage() {
               </div>
             )}
             <Button type="submit" className="w-full" disabled={loading || !!success}>
-              {loading ? "Création..." : "Créer mon compte"}
+              {loading
+                ? "Création..."
+                : fromTry
+                  ? "Voir mes subventions"
+                  : "Créer mon compte"}
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Déjà un compte ?{" "}
-            <Link href="/login" className="text-primary hover:underline">
+            <Link
+              href={fromTry ? "/login?from=try" : "/login"}
+              className="text-primary hover:underline"
+            >
               Se connecter
             </Link>
           </p>

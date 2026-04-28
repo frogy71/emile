@@ -6,6 +6,7 @@ import {
   isEmbeddingsAvailable,
   toPgVector,
 } from "@/lib/ai/embeddings";
+import { cleanupProjectText } from "@/lib/ai/project-cleanup";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -52,6 +53,12 @@ export async function POST(request: Request) {
     expected_results,
     sustainability,
     problem,
+    // The simple quick-start form opts in to a server-side cleanup pass that
+    // fixes typos and normalizes vocabulary before the project is embedded
+    // for matching. The advanced wizard skips it because power users have
+    // already structured their text. Default off so the field is purely
+    // additive.
+    cleanup,
   } = body;
 
   if (!name) {
@@ -60,6 +67,72 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+
+  // 2b. Optional AI cleanup pass — fix typos, normalize vocabulary, expand
+  // beneficiary terms with synonyms so the embedding catches more grants.
+  // The user's raw input is preserved separately under
+  // logframe_data.raw_input so they can see what they typed if they go to
+  // the edit page. Fail-soft: if Claude is down or rate-limited, fall back
+  // to the raw text rather than blocking project creation.
+  const rawInput = {
+    name,
+    summary,
+    problem,
+    themes,
+    geography,
+    beneficiaries_direct,
+    beneficiaries_indirect,
+    general_objective,
+    specific_objectives,
+    activities,
+    methodology,
+    partners,
+  };
+  const cleaned = cleanup
+    ? await cleanupProjectText({
+        name,
+        summary,
+        problem,
+        themes,
+        geography,
+        beneficiaries_direct,
+        beneficiaries_indirect,
+        general_objective,
+        specific_objectives,
+        activities,
+        methodology,
+        partners,
+      })
+    : null;
+
+  // Helpers to merge cleaned fields back over the raw values, falling back
+  // to the user's input whenever cleanup returned null/empty.
+  const pickStr = (clean: string | null | undefined, raw: string | null | undefined) =>
+    clean && clean.trim() ? clean : raw || null;
+  const pickArr = (clean: string[] | undefined, raw: string[] | undefined) =>
+    clean && clean.length ? clean : Array.isArray(raw) ? raw : [];
+
+  const finalName = pickStr(cleaned?.name, name) || name;
+  const finalSummary = pickStr(cleaned?.summary, summary);
+  const finalProblem = pickStr(cleaned?.problem, problem);
+  const finalThemes = pickArr(cleaned?.themes, themes);
+  const finalGeography = pickArr(cleaned?.geography, geography);
+  const finalBeneficiariesDirect = pickStr(
+    cleaned?.beneficiaries_direct,
+    beneficiaries_direct
+  );
+  const finalBeneficiariesIndirect = pickStr(
+    cleaned?.beneficiaries_indirect,
+    beneficiaries_indirect
+  );
+  const finalGeneralObjective = pickStr(cleaned?.general_objective, general_objective);
+  const finalSpecificObjectives = pickArr(
+    cleaned?.specific_objectives,
+    specific_objectives
+  );
+  const finalActivities = pickArr(cleaned?.activities, activities);
+  const finalMethodology = pickStr(cleaned?.methodology, methodology);
+  const finalPartners = pickStr(cleaned?.partners, partners);
 
   const supabase = getSupabaseAdmin();
 
@@ -94,33 +167,39 @@ export async function POST(request: Request) {
     orgId = newOrg.id;
   }
 
-  // 4. Build logframe_data for fields not in the schema
+  // 4. Build logframe_data for fields not in the schema. The cleaned
+  //    versions feed matching; raw_input keeps the user's original wording
+  //    so the edit page can show what they actually typed.
   const logframeData = {
-    general_objective: general_objective || null,
-    specific_objectives: specific_objectives || [],
-    beneficiaries_direct: beneficiaries_direct || null,
-    beneficiaries_indirect: beneficiaries_indirect || null,
+    general_objective: finalGeneralObjective,
+    specific_objectives: finalSpecificObjectives,
+    beneficiaries_direct: finalBeneficiariesDirect,
+    beneficiaries_indirect: finalBeneficiariesIndirect,
     beneficiaries_count: beneficiaries_count || null,
-    activities: activities || [],
-    methodology: methodology || null,
-    partners: partners || null,
+    activities: finalActivities,
+    methodology: finalMethodology,
+    partners: finalPartners,
     expected_results: expected_results || [],
     sustainability: sustainability || null,
-    problem: problem || null,
-    themes: themes || [],
+    problem: finalProblem,
+    themes: finalThemes,
+    // Keep what the user actually typed so we can show it back on the edit
+    // page or re-run cleanup later. Only stored when cleanup ran.
+    raw_input: cleaned ? rawInput : null,
+    cleanup_applied: cleaned ? true : false,
   };
 
-  // 5. Map wizard data to existing project columns + logframe_data
+  // 5. Map data to existing project columns + logframe_data
   const projectRow = {
     organization_id: orgId,
-    name,
-    summary: summary || null,
-    objectives: specific_objectives?.filter(Boolean) || [],
+    name: finalName,
+    summary: finalSummary,
+    objectives: finalSpecificObjectives.filter(Boolean),
     target_beneficiaries: [
-      beneficiaries_direct,
-      beneficiaries_indirect,
-    ].filter(Boolean),
-    target_geography: geography || [],
+      finalBeneficiariesDirect,
+      finalBeneficiariesIndirect,
+    ].filter(Boolean) as string[],
+    target_geography: finalGeography,
     requested_amount_eur: budget ? parseInt(budget, 10) : null,
     duration_months: duration_months ? parseInt(duration_months, 10) : null,
     indicators: (expected_results || [])

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,9 +15,15 @@ import { useToast } from "@/components/ui/toast";
 
 interface MatchButtonProps {
   projectId: string;
+  /**
+   * When true, fire the matcher automatically once on mount. Used by the
+   * quick-start flow which redirects here with ?match=auto so the user lands
+   * on results instead of an empty CTA.
+   */
+  autoStart?: boolean;
 }
 
-export function MatchButton({ projectId }: MatchButtonProps) {
+export function MatchButton({ projectId, autoStart = false }: MatchButtonProps) {
   const router = useRouter();
   const toast = useToast();
   const [, startTransition] = useTransition();
@@ -30,8 +36,9 @@ export function MatchButton({ projectId }: MatchButtonProps) {
   const [error, setError] = useState<string | null>(null);
   const [paywallMessage, setPaywallMessage] = useState<string | null>(null);
   const [confetti, setConfetti] = useState(false);
+  const autoStartedRef = useRef(false);
 
-  const handleMatch = async () => {
+  const handleMatch = useCallback(async () => {
     setLoading(true);
     setError(null);
     setResult(null);
@@ -78,7 +85,25 @@ export function MatchButton({ projectId }: MatchButtonProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, router, startTransition, toast]);
+
+  // Auto-fire once when invoked from the quick-start flow. Page-level guard
+  // ensures we only do this when there are no existing match scores, and the
+  // ref guard ensures the effect doesn't re-trigger on re-renders or after a
+  // router.refresh() repaints the matches.
+  useEffect(() => {
+    if (!autoStart || autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    void handleMatch();
+    // Strip ?match=auto from the URL so a hard refresh doesn't re-run.
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("match")) {
+        url.searchParams.delete("match");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
+  }, [autoStart, handleMatch]);
 
   return (
     <div className="flex flex-col items-end gap-2">

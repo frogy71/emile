@@ -29,10 +29,16 @@ import { resolveTier } from "@/lib/plan";
 
 export default async function ProjectDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ match?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
+  // The quick-start flow redirects here with ?match=auto so we fire the
+  // matcher on mount instead of making the user hunt for the button.
+  const autoMatch = sp?.match === "auto";
   const supabase = await createClient();
   const {
     data: { user },
@@ -120,7 +126,7 @@ export default async function ProjectDetailPage({
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <MatchButton projectId={project.id} />
+          <MatchButton projectId={project.id} autoStart={autoMatch && matchList.length === 0} />
           <Link href={`/grants?project_id=${project.id}`}>
             <Button variant="accent">
               <Sparkles className="h-4 w-4" />

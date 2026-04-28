@@ -29,10 +29,12 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Came from /try — they've already filled the project form. We adjust
-  // the copy and route them through /auth/post-signup so the pending
-  // project gets created server-side and they land on matches.
-  const fromTry = searchParams.get("from") === "try";
+  // Came from the public project form (homepage or legacy /try) — they've
+  // already filled it in. Adjust the copy and route them through
+  // /auth/post-signup so the pending project gets created server-side and
+  // they land on matches.
+  const fromValue = searchParams.get("from");
+  const fromFunnel = fromValue === "home" || fromValue === "try";
 
   // Where to send the user post-auth. /auth/post-signup is a thin client
   // shim that picks up the localStorage payload (if any) and posts it to
@@ -91,7 +93,7 @@ function SignupForm() {
       setError("");
       setLoading(false);
       setSuccess(
-        fromTry
+        fromFunnel
           ? "Compte créé ! Vérifiez votre email pour découvrir vos subventions."
           : "Compte créé ! Vérifiez votre email pour confirmer votre inscription."
       );
@@ -121,17 +123,17 @@ function SignupForm() {
           <Link href="/" className="text-xl font-bold text-foreground">
             Emile<span className="text-[#c8f76f] bg-foreground px-1.5 py-0.5 rounded-lg ml-1 text-base">.</span>
           </Link>
-          {fromTry && (
+          {fromFunnel && (
             <Badge variant="green" className="mx-auto mt-3 px-3 py-1 text-xs">
               <Sparkles className="h-3 w-3 mr-1" />
               Étape 2/2 — Créez votre compte
             </Badge>
           )}
           <CardTitle className="mt-4">
-            {fromTry ? "Une dernière étape." : "Créer un compte"}
+            {fromFunnel ? "Une dernière étape." : "Créer un compte"}
           </CardTitle>
           <CardDescription>
-            {fromTry
+            {fromFunnel
               ? "Créez votre compte pour voir vos résultats — 30 secondes, sans carte."
               : "Commencez à trouver vos subventions en quelques minutes"}
           </CardDescription>
@@ -231,7 +233,7 @@ function SignupForm() {
             <Button type="submit" className="w-full" disabled={loading || !!success}>
               {loading
                 ? "Création..."
-                : fromTry
+                : fromFunnel
                   ? "Voir mes subventions"
                   : "Créer mon compte"}
             </Button>
@@ -239,7 +241,7 @@ function SignupForm() {
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Déjà un compte ?{" "}
             <Link
-              href={fromTry ? "/login?from=try" : "/login"}
+              href={fromFunnel ? `/login?from=${fromValue ?? "home"}` : "/login"}
               className="text-primary hover:underline"
             >
               Se connecter

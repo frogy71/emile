@@ -24,12 +24,13 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // When the user reaches login from the /try funnel (existing account
-  // with a pending project in localStorage), we route them through
-  // /auth/post-signup so the project gets created before they hit the
-  // dashboard. Defaults to /dashboard for the normal login path.
-  const fromTry = searchParams.get("from") === "try";
-  const postAuthPath = fromTry ? "/auth/post-signup" : "/dashboard";
+  // When the user reaches login from the public project funnel (homepage
+  // form or legacy /try) with a pending project in localStorage, route
+  // them through /auth/post-signup so the project gets created before
+  // they hit the dashboard. Defaults to /dashboard for the normal login.
+  const fromValue = searchParams.get("from");
+  const fromFunnel = fromValue === "home" || fromValue === "try";
+  const postAuthPath = fromFunnel ? "/auth/post-signup" : "/dashboard";
 
   useEffect(() => {
     if (searchParams.get("error") === "auth") {

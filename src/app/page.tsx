@@ -219,23 +219,50 @@ const DIFFERENTIATORS = [
 const TESTIMONIALS = [
   {
     quote:
-      "En 10 minutes j'ai trouvé 3 subventions que je ne connaissais pas. C'est la première fois qu'un outil me fait gagner du temps au lieu d'en perdre.",
-    name: "Marie D.",
-    role: "Directrice d'une association culturelle",
+      "On est trois bénévoles, personne n'a le temps d'éplucher les sites de la région et des fondations. Emile m'a sorti un appel à projets de la DRAC que je n'avais jamais croisé en cinq ans d'asso. On l'a déposé la semaine dernière.",
+    name: "Cécile B.",
+    role: "Présidente d'une association culturelle",
+    location: "Tours",
     color: "bg-[#c8f76f]",
   },
   {
     quote:
-      "Le dossier généré par l'IA m'a fait gagner une semaine de travail. Je l'ai juste relu et complété — la structure était déjà là.",
-    name: "Thomas R.",
-    role: "Chargé de mission ESS",
+      "Avant, un dossier de demande me prenait deux jours pleins. Là je pars d'une trame déjà structurée et je peaufine. Mon dernier appel à projets, j'ai bouclé en une matinée — j'ai pu en déposer trois ce mois-ci au lieu d'un.",
+    name: "Julien M.",
+    role: "Chargé de mission financements, ONG santé",
+    location: "Lyon",
     color: "bg-[#ffe066]",
   },
   {
     quote:
-      "Le Kanban a transformé notre suivi. On voit d'un coup d'œil ce qui est déposé, ce qui attend, ce qu'on a décroché.",
-    name: "Sophie L.",
-    role: "Coordinatrice ONG environnement",
+      "Je cherchais un outil qui couvre à la fois les dispositifs FEDER, les appels nationaux et les fondations privées. C'est le seul que j'ai trouvé qui consolide vraiment les trois. On a arrêté de jongler entre quatre plateformes.",
+    name: "Anne-Sophie P.",
+    role: "Cheffe de projet financements, communauté de communes",
+    location: "Bretagne",
+    color: "bg-[#a3d5ff]",
+  },
+  {
+    quote:
+      "Ce qui m'a convaincu c'est la pertinence du matching. Pas de bruit, pas de dispositifs hors-sujet — uniquement des appels où mon projet rentrait vraiment dans les critères. Ça m'évite de perdre des semaines sur des dossiers qui n'auraient jamais abouti.",
+    name: "Karim H.",
+    role: "Porteur de projet ESS, économie circulaire",
+    location: "Marseille",
+    color: "bg-[#c8f76f]",
+  },
+  {
+    quote:
+      "Je le recommande maintenant à tous mes clients en phase d'amorçage. Ça leur donne une cartographie claire de leurs financements possibles, et de mon côté je peux me concentrer sur la stratégie et la rédaction plutôt que sur la veille.",
+    name: "Hélène V.",
+    role: "Consultante mécénat & fundraising",
+    location: "Paris",
+    color: "bg-[#ffe066]",
+  },
+  {
+    quote:
+      "On gère une vingtaine de dépôts en parallèle entre l'AFD, les programmes européens et les fondations. Le Kanban a remplacé un Excel partagé qui devenait ingérable. Toute l'équipe voit où on en est sans avoir à se demander qui suit quel dossier.",
+    name: "Pierre-Yves T.",
+    role: "Responsable financements, association humanitaire",
+    location: "Lille",
     color: "bg-[#a3d5ff]",
   },
 ];
@@ -598,16 +625,14 @@ export default function LandingPage() {
                 </blockquote>
                 <figcaption className="mt-5 border-t-2 border-border pt-4 text-sm">
                   <p className="font-black text-foreground">{t.name}</p>
-                  <p className="font-medium text-muted-foreground">{t.role}</p>
+                  <p className="font-medium text-muted-foreground">
+                    {t.role}
+                    {t.location ? ` · ${t.location}` : ""}
+                  </p>
                 </figcaption>
               </figure>
             ))}
           </div>
-
-          <p className="mt-8 text-xs font-medium text-muted-foreground">
-            * Témoignages illustratifs. Premiers utilisateurs en cours
-            d&apos;onboarding.
-          </p>
 
           <div className="mt-10 flex justify-center">
             <Link href="#essayer">

@@ -369,6 +369,183 @@ describe("computeHeuristicScore", () => {
     });
   });
 
+  describe("audience mismatch", () => {
+    // The bug we're fixing: a project about "inclusion numérique pour les
+    // seniors en milieu rural" was returning Erasmus+ grants because of
+    // strong topic overlap on "inclusion numérique" — but Erasmus+ funds
+    // young people only, so the grant is structurally ineligible.
+    const seniorOrg: OrgProfile = {
+      name: "Solidarité Numérique 65+",
+      mission: "Lutter contre la fracture numérique chez les seniors et personnes âgées en milieu rural",
+      legalStatus: "association",
+      thematicAreas: ["inclusion", "numerique"],
+      beneficiaries: ["seniors", "personnes âgées", "retraités"],
+      geographicFocus: ["France"],
+    };
+    const seniorProject: ProjectProfile = {
+      name: "Ateliers numériques pour seniors",
+      summary:
+        "Programme d'inclusion numérique pour seniors et personnes âgées en milieu rural — formation aux usages numériques essentiels",
+      objectives: ["Former 500 seniors aux usages numériques", "Réduire l'isolement des aînés"],
+      targetBeneficiaries: ["seniors", "personnes âgées", "retraités"],
+      targetGeography: ["France"],
+      requestedAmountEur: 50_000,
+      durationMonths: 12,
+    };
+
+    it("gates an Erasmus+ youth grant against a seniors project", () => {
+      const erasmus: GrantProfile = {
+        title: "Erasmus+ Jeunesse — Inclusion sociale",
+        summary:
+          "Programme européen de mobilité pour la jeunesse. Soutient les projets d'inclusion numérique destinés aux jeunes (13-30 ans) en Europe.",
+        funder: "Commission européenne",
+        thematicAreas: ["jeunesse", "education", "inclusion"],
+        eligibleEntities: ["association"],
+        eligibleCountries: ["France", "Europe"],
+        deadline: futureDate(90),
+      };
+      const r = computeHeuristicScore(seniorOrg, erasmus, seniorProject);
+      expect(r.gatedBy).toBe("audience_mismatch");
+      expect(r.score).toBe(0);
+      expect(r.recommendation).toBe("skip");
+    });
+
+    it("does NOT gate a CNSA / silver-economy grant for the same seniors project", () => {
+      const cnsa: GrantProfile = {
+        title: "Conférence des financeurs — prévention de la perte d'autonomie",
+        summary:
+          "Soutien aux actions collectives en faveur des personnes âgées de 60 ans et plus. Inclusion numérique des seniors éligible.",
+        funder: "CNSA",
+        thematicAreas: ["sante", "social", "numerique"],
+        eligibleEntities: ["association"],
+        eligibleCountries: ["France"],
+        deadline: futureDate(90),
+      };
+      const r = computeHeuristicScore(seniorOrg, cnsa, seniorProject);
+      expect(r.gatedBy).toBeUndefined();
+      expect(r.score).toBeGreaterThan(0);
+    });
+
+    it("gates a senior-only grant against a youth project", () => {
+      const youthOrg: OrgProfile = {
+        ...seniorOrg,
+        name: "Jeunesse Numérique",
+        mission: "Former les jeunes aux métiers du numérique",
+        beneficiaries: ["jeunes", "étudiants"],
+      };
+      const youthProject: ProjectProfile = {
+        ...seniorProject,
+        name: "Ateliers code pour lycéens",
+        summary: "Formation au code pour adolescents et jeunes de 16 à 25 ans",
+        objectives: ["Former 200 jeunes au code"],
+        targetBeneficiaries: ["jeunes", "lycéens"],
+      };
+      const seniorGrant: GrantProfile = {
+        title: "Bien vieillir — Conférence des financeurs",
+        summary: "Aide aux personnes âgées et retraités. EHPAD, CNSA, perte d'autonomie.",
+        thematicAreas: ["sante", "social"],
+        eligibleEntities: ["association"],
+        eligibleCountries: ["France"],
+        deadline: futureDate(90),
+      };
+      const r = computeHeuristicScore(youthOrg, seniorGrant, youthProject);
+      expect(r.gatedBy).toBe("audience_mismatch");
+      expect(r.score).toBe(0);
+    });
+
+    it("does NOT gate when grant audience is mixed (both youth and senior)", () => {
+      const mixedGrant: GrantProfile = {
+        title: "Inclusion numérique — tous publics",
+        summary:
+          "Programme transgénérationnel ciblant à la fois les jeunes et les seniors pour l'inclusion numérique.",
+        thematicAreas: ["inclusion", "numerique"],
+        eligibleEntities: ["association"],
+        eligibleCountries: ["France"],
+        deadline: futureDate(90),
+      };
+      const r = computeHeuristicScore(seniorOrg, mixedGrant, seniorProject);
+      expect(r.gatedBy).toBeUndefined();
+      expect(r.score).toBeGreaterThan(0);
+    });
+
+    it("does NOT gate when neither side has explicit audience markers", () => {
+      const neutralOrg: OrgProfile = {
+        name: "Action Climat",
+        mission: "Sensibilisation à la transition écologique",
+        legalStatus: "association",
+        thematicAreas: ["environnement"],
+        geographicFocus: ["France"],
+      };
+      const neutralProject: ProjectProfile = {
+        name: "Reforestation locale",
+        summary: "Plantation d'arbres en milieu urbain",
+        targetGeography: ["France"],
+        requestedAmountEur: 10_000,
+        durationMonths: 6,
+      };
+      const neutralGrant: GrantProfile = {
+        title: "Aide à la transition écologique",
+        summary: "Soutien aux projets environnementaux",
+        thematicAreas: ["environnement"],
+        eligibleEntities: ["association"],
+        eligibleCountries: ["France"],
+        deadline: futureDate(90),
+      };
+      const r = computeHeuristicScore(neutralOrg, neutralGrant, neutralProject);
+      expect(r.gatedBy).toBeUndefined();
+      expect(r.score).toBeGreaterThan(0);
+    });
+
+    it("ranks an aligned senior grant higher than an unrelated youth grant", () => {
+      const seniorGrant: GrantProfile = {
+        title: "Conférence des financeurs — inclusion numérique des seniors",
+        summary:
+          "Action de prévention pour personnes âgées de 60 ans et plus en zone rurale.",
+        funder: "CNSA",
+        thematicAreas: ["numerique", "social", "inclusion"],
+        eligibleEntities: ["association"],
+        eligibleCountries: ["France"],
+        minAmountEur: 5_000,
+        maxAmountEur: 80_000,
+        deadline: futureDate(90),
+      };
+      const erasmus: GrantProfile = {
+        title: "Erasmus+ Jeunesse",
+        summary: "Mobilité pour les jeunes 18-30 ans en Europe",
+        thematicAreas: ["jeunesse", "education"],
+        eligibleEntities: ["association"],
+        eligibleCountries: ["Europe"],
+        deadline: futureDate(90),
+      };
+      const sScore = computeHeuristicScore(seniorOrg, seniorGrant, seniorProject).score;
+      const eScore = computeHeuristicScore(seniorOrg, erasmus, seniorProject).score;
+      expect(sScore).toBeGreaterThan(eScore);
+      expect(eScore).toBe(0);
+    });
+
+    it("doesn't gate when the project has no audience signal but the grant targets youth", () => {
+      // Org-only mode: project not provided, org doesn't mention seniors.
+      // We have no evidence of mismatch → don't gate.
+      const genericOrg: OrgProfile = {
+        name: "Association Générale",
+        mission: "Action sociale",
+        legalStatus: "association",
+        thematicAreas: ["social"],
+        geographicFocus: ["France"],
+      };
+      const youthGrant: GrantProfile = {
+        title: "Erasmus+ Jeunesse",
+        summary: "Mobilité jeunesse en Europe pour les jeunes de 18 à 30 ans",
+        thematicAreas: ["jeunesse"],
+        eligibleEntities: ["association"],
+        eligibleCountries: ["Europe"],
+        deadline: futureDate(90),
+      };
+      const r = computeHeuristicScore(genericOrg, youthGrant);
+      expect(r.gatedBy).toBeUndefined();
+    });
+  });
+
   describe("output shape", () => {
     it("always returns a difficulty + recommendation + summary", () => {
       const grant: GrantProfile = {

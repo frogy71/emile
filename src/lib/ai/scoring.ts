@@ -21,6 +21,7 @@
  *     - eligible_entities specified and org/project doesn't match
  *     - eligible_countries specified and no geographic overlap
  *     - grant min_amount exceeds project requested_amount
+ *     - audience mismatch (e.g. youth-only grant for a seniors project)
  *
  *   COMPONENTS (max 100):
  *     - Thematic alignment       : 0-40   (structured themes + free-text)
@@ -229,6 +230,175 @@ function geoOverlap(orgGeo: string[] | undefined, grantGeo: string[] | undefined
   return { strength: "none" };
 }
 
+// ─── Audience detection ─────────────────────────────────────────
+//
+// A grant can be thematically aligned with a project yet structurally
+// ineligible because it targets a *different audience*. Erasmus+ funds
+// "inclusion numérique" only when the beneficiaries are young people, so a
+// project about digital inclusion for seniors should score 0 against it
+// regardless of topic overlap.
+//
+// We catch this with a hard gate. The detector scans every text source on
+// each side (grant title/summary/themes/eligible_entities; project
+// targetBeneficiaries/summary/objectives/name; org mission/beneficiaries
+// when no project is supplied) for audience markers. When the grant
+// audiences and project audiences are STRICTLY incompatible — i.e. one
+// side has audience A only, the other has audience B only, and (A, B) is
+// in the incompatible-pair list — we gate to 0. If either side has both
+// audiences, or no audience at all, we don't gate (no evidence of
+// mismatch).
+//
+// Why a hard gate instead of a penalty? Empirically these mismatches
+// produced 60+ scoring grants because thematic overlap dominates. A soft
+// penalty would still surface them in the top-N. The audience constraint
+// is structural — the project is not eligible — so 0 is the correct score.
+
+type AudienceType =
+  | "youth"
+  | "senior"
+  | "association"
+  | "entreprise"
+  | "collectivite"
+  | "particulier";
+
+/**
+ * Patterns are matched against NORMALIZED text (lowercase, no diacritics).
+ * Use \b word boundaries to avoid spurious substring matches.
+ */
+const AUDIENCE_PATTERNS: Record<AudienceType, RegExp[]> = {
+  youth: [
+    /\bjeunes?\b/,
+    /\bjeunesse\b/,
+    /\badolescent/,
+    /\bmineurs?\b/,
+    /\betudiant/,
+    /\blyceens?\b/,
+    /\bcollegiens?\b/,
+    /\byouth\b/,
+    /\byoung\b/,
+    /\berasmus/,
+    /\bservice civique\b/,
+    /\b1[68][ -]?a?[ -]?(2[0-9]|30)\s*ans?\b/,
+    /\bmoins de (25|30) ans\b/,
+    /\bnouvelle generation\b/,
+  ],
+  senior: [
+    /\bseniors?\b/,
+    /\bpersonnes? agees?\b/,
+    /\bretraites?\b/,
+    /\baines?\b/,
+    /\btroisieme age\b/,
+    /\bquatrieme age\b/,
+    /\bgrand age\b/,
+    /\bvieillesse\b/,
+    /\baidants?\b/,
+    /\belderly\b/,
+    /\bperte d autonomie\b/,
+    /\bcnsa\b/,
+    /\bsilver economie\b/,
+    /\bgerontolog/,
+    /\behpad/,
+    /\bplus de 6[05]\s*ans?\b/,
+    /\b6[05]\s*ans? et plus\b/,
+    /\bconference des financeurs\b/,
+  ],
+  association: [
+    /\bassociations?\b/,
+    /\bong\b/,
+    /\bnonprofit/,
+    /\bnon lucratif\b/,
+    /\ba but non lucratif\b/,
+  ],
+  entreprise: [
+    /\bentreprises?\b/,
+    /\bpme\b/,
+    /\bstart[ -]?ups?\b/,
+    /\bsocietes? commerciales?\b/,
+    /\btpe\b/,
+  ],
+  collectivite: [
+    /\bcollectivites?\b/,
+    /\bcommunes?\b/,
+    /\bregions?\b/,
+    /\bdepartements?\b/,
+    /\bepci\b/,
+    /\bintercommunal/,
+  ],
+  particulier: [
+    /\bparticuliers?\b/,
+    /\bcitoyens?\b/,
+    /\bindividus?\b/,
+  ],
+};
+
+/**
+ * Pairs of audiences that cannot coexist on the same matching project.
+ * Order doesn't matter — we check both directions.
+ *
+ * Note: association/entreprise mismatches are *also* caught by the entity
+ * gate via legalStatus → eligibleEntities. We include them here for the
+ * narrower case where the grant doesn't list eligibleEntities but the
+ * summary makes it clear who's targeted.
+ */
+const INCOMPATIBLE_AUDIENCES: Array<[AudienceType, AudienceType]> = [
+  ["youth", "senior"],
+  ["association", "entreprise"],
+  ["collectivite", "particulier"],
+];
+
+function detectAudiences(texts: Array<string | undefined | null>): Set<AudienceType> {
+  const out = new Set<AudienceType>();
+  const joined = texts.filter(Boolean).map((s) => normalize(s as string)).join(" ");
+  if (!joined) return out;
+  for (const [audience, patterns] of Object.entries(AUDIENCE_PATTERNS) as Array<[
+    AudienceType,
+    RegExp[]
+  ]>) {
+    if (patterns.some((p) => p.test(joined))) out.add(audience);
+  }
+  return out;
+}
+
+/** Flatten an array-of-strings into a single space-joined string for detection. */
+function joinArr(arr: string[] | undefined): string {
+  return (arr || []).filter(Boolean).join(" ");
+}
+
+/**
+ * Returns the first incompatible (grant, project) pair found, or null when
+ * audiences are compatible (or there's no evidence either way).
+ *
+ * "Strictly incompatible" means:
+ *   - grant has audience A, NOT B
+ *   - project has audience B, NOT A
+ * If either side is mixed, we abstain (no gate).
+ */
+export function detectAudienceMismatch(
+  grantAudiences: Set<AudienceType>,
+  projectAudiences: Set<AudienceType>
+): { grant: AudienceType; project: AudienceType } | null {
+  for (const [a, b] of INCOMPATIBLE_AUDIENCES) {
+    if (grantAudiences.has(a) && !grantAudiences.has(b) &&
+        projectAudiences.has(b) && !projectAudiences.has(a)) {
+      return { grant: a, project: b };
+    }
+    if (grantAudiences.has(b) && !grantAudiences.has(a) &&
+        projectAudiences.has(a) && !projectAudiences.has(b)) {
+      return { grant: b, project: a };
+    }
+  }
+  return null;
+}
+
+const AUDIENCE_LABEL: Record<AudienceType, string> = {
+  youth: "jeunes",
+  senior: "seniors",
+  association: "associations",
+  entreprise: "entreprises",
+  collectivite: "collectivités",
+  particulier: "particuliers",
+};
+
 // ─── Entity eligibility ──────────────────────────────────────────
 
 function checkEntityFit(
@@ -365,6 +535,38 @@ export function computeHeuristicScore(
     );
   }
 
+  // Audience gate — catches "Erasmus+ for our seniors project" cases that
+  // pass the entity gate (both accept associations) but target wholly
+  // different beneficiary groups.
+  const grantAudiences = detectAudiences([
+    grant.title,
+    grant.summary,
+    joinArr(grant.thematicAreas),
+    joinArr(grant.eligibleEntities),
+    grant.funder,
+  ]);
+  const projectAudiences = project
+    ? detectAudiences([
+        project.name,
+        project.summary,
+        joinArr(project.objectives),
+        joinArr(project.targetBeneficiaries),
+      ])
+    : detectAudiences([
+        org.mission,
+        joinArr(org.thematicAreas),
+        joinArr(org.beneficiaries),
+      ]);
+
+  const audienceMismatch = detectAudienceMismatch(grantAudiences, projectAudiences);
+  if (audienceMismatch) {
+    return gated(
+      "audience_mismatch",
+      `Public visé incompatible (subvention pour ${AUDIENCE_LABEL[audienceMismatch.grant]}, projet pour ${AUDIENCE_LABEL[audienceMismatch.project]})`,
+      computeDifficulty(grant)
+    );
+  }
+
   // Budget gate (only when grant is clearly too big)
   const budgetFit = checkBudgetFit(
     project?.requestedAmountEur,
@@ -377,8 +579,20 @@ export function computeHeuristicScore(
   }
 
   // ─── THEMATIC ALIGNMENT (0-40) ──────────────────────────────────
-  const orgFreeText = [org.mission, ...(project ? [project.summary, ...(project.objectives || [])] : [])]
-    .filter(Boolean) as string[];
+  // Include targetBeneficiaries + org.beneficiaries in the free-text pool so
+  // beneficiary descriptors contribute to the keyword match (and are visible
+  // to extractKeywords' free-text scan).
+  const orgFreeText = [
+    org.mission,
+    joinArr(org.beneficiaries),
+    ...(project
+      ? [
+          project.summary,
+          joinArr(project.objectives),
+          joinArr(project.targetBeneficiaries),
+        ]
+      : []),
+  ].filter(Boolean) as string[];
   const grantFreeText = [grant.title, grant.summary, grant.funder].filter(Boolean) as string[];
 
   const orgKeywords = extractKeywords(org.thematicAreas, orgFreeText);

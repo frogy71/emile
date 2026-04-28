@@ -180,11 +180,12 @@ export function GrantInteractions({
         }
         return next;
       });
-      // Tiny micro-feedback so the user knows the action stuck — and the
-      // "save" toast doubles as a discoverability nudge for /saved.
+      // Tiny micro-feedback so the user knows the action stuck. Likes and
+      // saves both seed the Kanban (see migration 0011), so we point the
+      // user at /pipeline rather than the older saved/ list.
       const messages: Partial<Record<InteractionType, [string, string?]>> = {
-        save: ["Sauvegardé", "Retrouve-la dans Mes subventions sauvegardées."],
-        like: ["Bien noté", "On va te proposer plus de subventions comme celle-ci."],
+        save: ["Ajouté à votre pipeline", "Retrouve-la dans Mon pipeline."],
+        like: ["Ajouté à votre pipeline", "Retrouve-la dans Mon pipeline."],
         apply: ["Marqué comme « je postule »", "On garde ça en tête pour la suite."],
         dismiss: ["Subvention ignorée"],
         dislike: ["Bien noté", "On évitera de te proposer ce type de subvention."],

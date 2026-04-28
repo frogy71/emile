@@ -4,10 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Bookmark,
   Building2,
   FileText,
   FolderOpen,
+  KanbanSquare,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -145,13 +145,13 @@ export function AppShell({
             Subventions
           </NavLink>
           <NavLink
-            href="/saved"
-            icon={Bookmark}
+            href="/pipeline"
+            icon={KanbanSquare}
             activeClass="bg-[#ffa3d1]"
             hoverClass="hover:bg-[#ffa3d1]"
             pathname={pathname}
           >
-            Sauvegardées
+            Mon pipeline
           </NavLink>
           <NavLink
             href="/profile"

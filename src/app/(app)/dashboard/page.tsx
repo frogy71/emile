@@ -260,7 +260,7 @@ export default async function DashboardPage({
         </div>
 
         <Link
-          href="/saved"
+          href="/pipeline"
           className="rounded-2xl border-2 border-border bg-[#ffa3d1] p-5 shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px] focus-visible:outline-none"
         >
           <div className="flex items-center gap-3">
@@ -271,7 +271,7 @@ export default async function DashboardPage({
               <p className="text-3xl font-black leading-none">
                 {savedCount || 0}
               </p>
-              <p className="text-xs font-bold mt-1">Sauvegardées</p>
+              <p className="text-xs font-bold mt-1">Dans mon pipeline</p>
             </div>
           </div>
         </Link>

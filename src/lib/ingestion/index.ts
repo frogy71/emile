@@ -354,9 +354,11 @@ async function embedGrantsBySourceUrl(
   let skipped = 0;
   let errors = 0;
 
-  // Process in chunks of 64 so the embedding API call + the PATCH writes
-  // stay predictable in size.
-  const chunkSize = 64;
+  // Chunk small enough that the encoded GET URL (source_url=in.(…)) stays
+  // under Cloudflare's ~8KB URL limit — the project's Supabase host is
+  // behind Cloudflare, and 64 percent-encoded URLs blew past it (connect
+  // timeout, never reaching the origin).
+  const chunkSize = 16;
   for (let i = 0; i < sourceUrls.length; i += chunkSize) {
     const slice = sourceUrls.slice(i, i + chunkSize);
 

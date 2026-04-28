@@ -294,13 +294,33 @@ export default function AdminDashboard() {
         },
         body: JSON.stringify({ mode }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        alert(`Erreur: ${data.error || "inconnue"}`);
+
+      // The route always responds with JSON, but the request can be
+      // intercepted by Vercel's gateway (504 timeout on long full-ingests,
+      // 502 cold-start failures, …) which emits plain text like
+      // "An error occurred…". Read as text first so we can surface the real
+      // body instead of crashing on JSON.parse.
+      const raw = await res.text();
+      let data: { success?: boolean; error?: string; expired_marked?: number; duration_seconds?: number; report?: { totalFetched: number; totalInserted: number; totalErrors: number } } | null = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        const hint =
+          res.status === 504 || /timeout|timed? out/i.test(raw)
+            ? " — la fonction a probablement dépassé 300s. Lance « Sync rapide » ou des sources individuelles."
+            : "";
+        alert(
+          `Erreur ${res.status} ${res.statusText}: ${raw.slice(0, 200) || "réponse vide"}${hint}`
+        );
+        return;
+      }
+
+      if (!res.ok || !data?.success) {
+        alert(`Erreur: ${data?.error || `HTTP ${res.status}`}`);
       } else if (mode === "cleanup") {
         alert(`Cleanup OK — ${data.expired_marked} grants expirés marqués`);
       } else {
-        const r = data.report;
+        const r = data.report!;
         alert(
           `Ingestion ${mode} terminée (${data.duration_seconds}s)\n${r.totalFetched} fetched · ${r.totalInserted} upserted · ${r.totalErrors} errors\n${data.expired_marked} grants expirés marqués`
         );

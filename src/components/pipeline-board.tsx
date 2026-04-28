@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ExternalLink,
+  FolderKanban,
   GripVertical,
   Inbox,
   PartyPopper,
@@ -43,6 +44,11 @@ export type PipelineCard = {
   sourceName: string | null;
   status: PipelineStatus;
   createdAt: string;
+  // Origin project — set when the user liked/saved/applied from a project
+  // page. Older interactions (pre-project_id) and standalone-catalog clicks
+  // come back with null and we just skip the label.
+  projectId: string | null;
+  projectName: string | null;
 };
 
 type ColumnDef = {
@@ -386,6 +392,21 @@ function KanbanCard({
               </span>
             )}
           </div>
+
+          {card.projectName && (
+            <Link
+              href={card.projectId ? `/projects/${card.projectId}` : "#"}
+              draggable={false}
+              onClick={(e) => {
+                if (!card.projectId) e.preventDefault();
+                e.stopPropagation();
+              }}
+              className="mb-1 inline-flex max-w-full items-center gap-1 rounded-md border-2 border-border bg-secondary px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-foreground/80 transition-colors hover:bg-card"
+            >
+              <FolderKanban className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{card.projectName}</span>
+            </Link>
+          )}
 
           <Link
             href={`/grants/${card.grantId}`}

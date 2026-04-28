@@ -13,6 +13,7 @@ import {
 type InteractionRow = {
   id: string;
   grant_id: string;
+  project_id: string | null;
   pipeline_status: PipelineStatus | null;
   interaction_type: string;
   created_at: string;
@@ -24,6 +25,10 @@ type InteractionRow = {
     max_amount_eur: number | null;
     source_url: string | null;
     source_name: string | null;
+  } | null;
+  projects: {
+    id: string;
+    name: string | null;
   } | null;
 };
 
@@ -63,7 +68,7 @@ export default async function PipelinePage() {
   const { data: rowsRaw } = await supabaseAdmin
     .from("user_grant_interactions")
     .select(
-      "id, grant_id, pipeline_status, interaction_type, created_at, grants(id, title, funder, deadline, max_amount_eur, source_url, source_name)"
+      "id, grant_id, project_id, pipeline_status, interaction_type, created_at, grants(id, title, funder, deadline, max_amount_eur, source_url, source_name), projects(id, name)"
     )
     .eq("organization_id", org.id)
     .in("interaction_type", ["like", "save", "apply"])
@@ -101,6 +106,8 @@ export default async function PipelinePage() {
         sourceName: row.grants.source_name,
         status,
         createdAt: row.created_at,
+        projectId: row.project_id,
+        projectName: row.projects?.name ?? null,
       } satisfies PipelineCard;
     })
     .filter((c): c is PipelineCard => c !== null);

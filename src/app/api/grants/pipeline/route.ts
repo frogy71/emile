@@ -27,6 +27,7 @@ type Column = (typeof COLUMN_ORDER)[number];
 type InteractionRow = {
   id: string;
   grant_id: string;
+  project_id: string | null;
   pipeline_status: Column | null;
   interaction_type: string;
   created_at: string;
@@ -38,6 +39,10 @@ type InteractionRow = {
     max_amount_eur: number | null;
     source_url: string | null;
     source_name: string | null;
+  } | null;
+  projects: {
+    id: string;
+    name: string | null;
   } | null;
 };
 
@@ -52,6 +57,11 @@ export type PipelineCard = {
   sourceName: string | null;
   status: Column;
   createdAt: string;
+  // Project context — the project the user was looking at when they liked /
+  // saved / applied. Null when the interaction came from the standalone
+  // grants page or an old pre-project_id row.
+  projectId: string | null;
+  projectName: string | null;
 };
 
 export type PipelineResponse = {
@@ -82,7 +92,7 @@ export async function GET() {
   const { data: rowsRaw, error } = await supabaseAdmin
     .from("user_grant_interactions")
     .select(
-      "id, grant_id, pipeline_status, interaction_type, created_at, grants(id, title, funder, deadline, max_amount_eur, source_url, source_name)"
+      "id, grant_id, project_id, pipeline_status, interaction_type, created_at, grants(id, title, funder, deadline, max_amount_eur, source_url, source_name), projects(id, name)"
     )
     .eq("organization_id", org.id)
     .in("interaction_type", ["like", "save", "apply"])
@@ -143,6 +153,8 @@ export async function GET() {
       sourceName: row.grants.source_name,
       status,
       createdAt: row.created_at,
+      projectId: row.project_id,
+      projectName: row.projects?.name ?? null,
     });
   }
 

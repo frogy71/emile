@@ -68,6 +68,20 @@ export const grants = pgTable("grants", {
   status: text("status").default("active"),
   aiSummary: text("ai_summary"),
   popularityScore: integer("popularity_score").default(0).notNull(),
+  // Enrichment columns (migration 0012). The enricher fills these from the
+  // source page when the ingest transform can't — so detail pages render the
+  // same template regardless of where the grant came from.
+  openDate: timestamp("open_date", { withTimezone: true }),
+  difficultyLevel: text("difficulty_level"),
+  eligibilityConditions: text("eligibility_conditions"),
+  requiredDocuments: text("required_documents").array(),
+  applicationUrl: text("application_url"),
+  contactInfo: text("contact_info"),
+  coFinancingPct: integer("co_financing_pct"),
+  enrichedAt: timestamp("enriched_at", { withTimezone: true }),
+  // jsonb for the raw LLM output (or error trace). Drizzle's $type generic
+  // gives us typed reads in callers without erasing the column type.
+  enrichmentData: jsonb("enrichment_data").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

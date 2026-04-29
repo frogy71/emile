@@ -225,8 +225,9 @@ export function transformEUToGrant(topic: EUTopic) {
     `${topic.frameworkProgramme} ${topic.callTitle} ${topic.identifier}`
   );
 
+  const topicUrl = `https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/${topic.identifier}`;
   return {
-    sourceUrl: `https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/${topic.identifier}`,
+    sourceUrl: topicUrl,
     sourceName: isHumanitarian ? "EuropeAid / INTPA" : "EU Funding & Tenders",
     title: topic.title,
     summary: topic.summary || topic.callTitle || null,
@@ -244,6 +245,15 @@ export function transformEUToGrant(topic: EUTopic) {
     language: "en",
     status: "active",
     aiSummary: null,
+    // SEDIA exposes the call open date directly, plus the topic-details URL
+    // is the application portal. EU calls universally require co-funding —
+    // the typical Horizon RIA covers 100% but consortia still bring matched
+    // staff time, so we don't claim a precise % here and let the enricher
+    // confirm. Difficulty defaults to "expert" because EU calls are
+    // multi-partner consortia with eligibility audits — wrong rarely.
+    openDate: topic.startDate ? new Date(topic.startDate) : null,
+    applicationUrl: topicUrl,
+    difficultyLevel: "expert",
   };
 }
 

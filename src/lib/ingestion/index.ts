@@ -259,27 +259,51 @@ async function upsertGrants(
 
   const chunkSize = 50;
   for (let i = 0; i < grants.length; i += chunkSize) {
-    const chunk = grants.slice(i, i + chunkSize).map((g) => ({
-      source_url: g.sourceUrl,
-      source_name: g.sourceName,
-      title: g.title,
-      summary: g.summary,
-      raw_content: g.rawContent,
-      funder: g.funder,
-      country: g.country,
-      thematic_areas: g.thematicAreas,
-      eligible_entities: g.eligibleEntities,
-      eligible_countries: g.eligibleCountries,
-      min_amount_eur: g.minAmountEur,
-      max_amount_eur: g.maxAmountEur,
-      co_financing_required: g.coFinancingRequired,
-      deadline: g.deadline?.toISOString?.() ?? g.deadline ?? null,
-      grant_type: g.grantType,
-      language: g.language,
-      status: g.status,
-      ai_summary: g.aiSummary,
-      updated_at: new Date().toISOString(),
-    }));
+    const chunk = grants.slice(i, i + chunkSize).map((g) => {
+      // Source transforms can pre-populate enrichment fields when the
+      // upstream feed is already structured (Aides-Territoires's
+      // application_url, EU SEDIA's start_date, etc). For everything else,
+      // these stay undefined and the enricher will fill them later — we
+      // intentionally omit `enriched_at` from the payload so existing
+      // already-enriched rows keep their value through ON CONFLICT, while
+      // newly inserted rows fall back to the column default (NULL) and get
+      // picked up by enrichGrantsBatch.
+      const row: Record<string, unknown> = {
+        source_url: g.sourceUrl,
+        source_name: g.sourceName,
+        title: g.title,
+        summary: g.summary,
+        raw_content: g.rawContent,
+        funder: g.funder,
+        country: g.country,
+        thematic_areas: g.thematicAreas,
+        eligible_entities: g.eligibleEntities,
+        eligible_countries: g.eligibleCountries,
+        min_amount_eur: g.minAmountEur,
+        max_amount_eur: g.maxAmountEur,
+        co_financing_required: g.coFinancingRequired,
+        deadline: g.deadline?.toISOString?.() ?? g.deadline ?? null,
+        grant_type: g.grantType,
+        language: g.language,
+        status: g.status,
+        ai_summary: g.aiSummary,
+        updated_at: new Date().toISOString(),
+      };
+      if (g.openDate !== undefined) {
+        row.open_date = g.openDate?.toISOString?.() ?? g.openDate ?? null;
+      }
+      if (g.applicationUrl !== undefined) row.application_url = g.applicationUrl;
+      if (g.contactInfo !== undefined) row.contact_info = g.contactInfo;
+      if (g.coFinancingPct !== undefined) row.co_financing_pct = g.coFinancingPct;
+      if (g.eligibilityConditions !== undefined) {
+        row.eligibility_conditions = g.eligibilityConditions;
+      }
+      if (g.requiredDocuments !== undefined) {
+        row.required_documents = g.requiredDocuments;
+      }
+      if (g.difficultyLevel !== undefined) row.difficulty_level = g.difficultyLevel;
+      return row;
+    });
 
     try {
       const res = await fetch(

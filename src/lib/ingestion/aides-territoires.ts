@@ -240,6 +240,36 @@ export function transformToGrant(raw: AideTerritoireRaw) {
   const deadlineRaw = raw.submission_deadline || raw.predeposit_date || null;
   const deadline = deadlineRaw ? new Date(deadlineRaw) : null;
 
+  // Open date — when the call accepts dossiers. start_date is the canonical
+  // field; falling back to predeposit_date covers two-stage calls where a
+  // pre-screening opens before the full submission window.
+  const openDateRaw = raw.start_date || raw.predeposit_date || null;
+  const openDate = openDateRaw ? new Date(openDateRaw) : null;
+
+  // Co-financing percentage — Aides-Territoires reports the *subvention*
+  // rate (what the funder covers), so the porteur's required co-finance is
+  // 100 - upper_bound. We only fill it when the upper bound is real (not
+  // null) and below 100; "100% subvention" means no co-finance is required
+  // and we leave the column null rather than writing 0 (which would render
+  // as "0% requis" instead of "Non requis").
+  let coFinancingPct: number | null = null;
+  if (
+    typeof raw.subvention_rate_upper_bound === "number" &&
+    raw.subvention_rate_upper_bound < 100 &&
+    raw.subvention_rate_upper_bound >= 0
+  ) {
+    coFinancingPct = Math.round(100 - raw.subvention_rate_upper_bound);
+  }
+
+  // Eligible entities → human-readable conditions string. The API also has
+  // a free-text `eligibility` field which is gold when present, so prefer
+  // that and fall back to the audience tags.
+  const eligibilityConditions =
+    cleanHtml(raw.eligibility)?.slice(0, 2000) ||
+    (raw.targeted_audiences?.length
+      ? `Cible : ${raw.targeted_audiences.join(", ")}`
+      : null);
+
   // Grant type: refine using aid_types when available
   let grantType = raw.is_call_for_project ? "appel_a_projets" : "subvention";
   const aidTypeText = aidTypeNames.join(" ").toLowerCase();
@@ -270,6 +300,13 @@ export function transformToGrant(raw: AideTerritoireRaw) {
     language: "fr",
     status: "active",
     aiSummary: null,
+    // Structured enrichment — pre-fill what the API already knows so the LLM
+    // pass only has to handle difficulty and the document checklist.
+    openDate,
+    applicationUrl: raw.application_url || null,
+    contactInfo: raw.contact?.trim() || null,
+    coFinancingPct,
+    eligibilityConditions,
   };
 }
 

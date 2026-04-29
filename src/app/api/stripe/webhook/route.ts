@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createClient } from "@supabase/supabase-js";
+import { skipPendingForUser } from "@/lib/email/send-engine";
 
 function getSupabase() {
   return createClient(
@@ -52,6 +53,13 @@ export async function POST(request: Request) {
             plan_cancelled_at: null,
           })
           .eq("user_id", userId);
+
+        // User just converted — kill the rest of the nurture sequence so we
+        // don't keep emailing a paying customer. Fire-and-forget; webhook
+        // success isn't blocked on this.
+        skipPendingForUser(userId, "converted").catch((err) =>
+          console.error("[email-sequence] skip on conversion failed:", err)
+        );
       }
       break;
     }

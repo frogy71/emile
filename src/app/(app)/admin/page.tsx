@@ -23,7 +23,9 @@ import {
   Sparkles,
   DollarSign,
   Image as ImageIcon,
+  Mail,
 } from "lucide-react";
+import { EmailSequenceDashboard } from "@/components/email-sequence-dashboard";
 
 interface SourceStat {
   name: string;
@@ -386,6 +388,12 @@ export default function AdminDashboard() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Link href="/admin/email-sequences">
+            <Button variant="outline">
+              <Mail className="h-4 w-4" />
+              Séquence emails
+            </Button>
+          </Link>
           <Link href="/admin/carousels">
             <Button variant="outline">
               <ImageIcon className="h-4 w-4" />
@@ -469,6 +477,9 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Email conversion engine — Free → Pro nurture sequence */}
+      <EmailSequenceDashboard />
 
       {/* Activité récente */}
       <h2 className="text-xl font-black mb-4">Activité récente</h2>

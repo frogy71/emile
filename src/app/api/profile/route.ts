@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { enrollUser } from "@/lib/email/send-engine";
 
 /**
  * GET /api/profile — fetch the current user's organization
@@ -104,6 +105,13 @@ export async function POST(request: Request) {
         .then(({ error: prefError }) => {
           if (prefError) console.error("alert_pref seed error:", prefError.message);
         });
+
+      // Enroll the user in the Free → Pro nurture sequence. Idempotent
+      // (unique index on user_id, step_number) so future onboarding edits
+      // won't duplicate. Fire-and-forget — don't block org creation.
+      enrollUser(user.id, result.data.id, new Date(user.created_at)).catch(
+        (err) => console.error("[email-sequence] enrollUser failed:", err)
+      );
     }
   }
 

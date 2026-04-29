@@ -7,6 +7,7 @@ import {
   toPgVector,
 } from "@/lib/ai/embeddings";
 import { cleanupProjectText } from "@/lib/ai/project-cleanup";
+import { enrollUser } from "@/lib/email/send-engine";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -165,6 +166,12 @@ export async function POST(request: Request) {
       );
     }
     orgId = newOrg.id;
+
+    // Enroll the freshly-onboarded user in the nurture sequence. Idempotent
+    // via the (user_id, step_number) unique index. Fire-and-forget.
+    enrollUser(user.id, orgId, new Date(user.created_at)).catch((err) =>
+      console.error("[email-sequence] enrollUser failed:", err)
+    );
   }
 
   // 4. Build logframe_data for fields not in the schema. The cleaned

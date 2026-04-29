@@ -189,6 +189,36 @@ export const userGrantInteractions = pgTable(
   ]
 );
 
+// ─── Email sequence (conversion engine) ─────────────────────────
+//
+// Free → Pro nurture sequence. `email_sequence_templates` holds the editable
+// copy; `email_sequence_queue` is the per-user enrollment log used by the
+// hourly cron and the open/click/unsubscribe tracking routes.
+export const emailSequenceTemplates = pgTable("email_sequence_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  stepNumber: integer("step_number").notNull().unique(),
+  delayDays: integer("delay_days").notNull(),
+  subject: text("subject").notNull(),
+  bodyHtml: text("body_html").notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const emailSequenceQueue = pgTable("email_sequence_queue", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull(),
+  organizationId: uuid("organization_id"),
+  stepNumber: integer("step_number").notNull(),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  clickedAt: timestamp("clicked_at", { withTimezone: true }),
+  status: text("status").default("pending").notNull(),
+  trackingToken: uuid("tracking_token").defaultRandom().notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Type exports ────────────────────────────────────────────────
 export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
@@ -202,3 +232,7 @@ export type IngestionLog = typeof ingestionLogs.$inferSelect;
 export type NewIngestionLog = typeof ingestionLogs.$inferInsert;
 export type UserGrantInteraction = typeof userGrantInteractions.$inferSelect;
 export type NewUserGrantInteraction = typeof userGrantInteractions.$inferInsert;
+export type EmailSequenceTemplate = typeof emailSequenceTemplates.$inferSelect;
+export type NewEmailSequenceTemplate = typeof emailSequenceTemplates.$inferInsert;
+export type EmailSequenceQueueItem = typeof emailSequenceQueue.$inferSelect;
+export type NewEmailSequenceQueueItem = typeof emailSequenceQueue.$inferInsert;

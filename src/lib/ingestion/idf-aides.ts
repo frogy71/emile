@@ -188,6 +188,7 @@ export function transformIdfAideToGrant(a: IdfAide) {
         ? a.audiences
         : ["association", "collectivite", "entreprise"],
     eligibleCountries: ["FR"],
+    targetRegions: ["Île-de-France"],
     minAmountEur: null,
     maxAmountEur: a.maxAmountEur,
     coFinancingRequired: true,

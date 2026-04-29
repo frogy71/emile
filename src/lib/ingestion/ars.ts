@@ -307,6 +307,7 @@ export function transformARSToGrant(p: ARSProgram) {
     thematicAreas: p.themes,
     eligibleEntities: p.eligibleEntities ?? ["association", "etablissement-sante"],
     eligibleCountries: ["FR"],
+    targetRegions: p.region ? [p.region] : null,
     minAmountEur: p.minAmountEur ?? 5000,
     maxAmountEur: p.maxAmountEur ?? 200000,
     coFinancingRequired: true,

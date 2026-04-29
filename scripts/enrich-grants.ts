@@ -13,7 +13,10 @@
  */
 
 import { config } from "dotenv";
-config({ path: ".env.local" });
+// override:true so .env.local wins over a stale empty ANTHROPIC_API_KEY in
+// the shell — without it dotenv silently keeps the empty value and the
+// enricher fails at the LLM step.
+config({ path: ".env.local", override: true });
 
 import { enrichGrantsBatch } from "../src/lib/ai/grant-enricher";
 

@@ -130,6 +130,7 @@ export function transformOccitanieToGrant(a: OccitanieAide) {
     thematicAreas: a.themes.length > 0 ? a.themes : ["Territoires"],
     eligibleEntities: ["association", "collectivite", "entreprise"],
     eligibleCountries: ["FR"],
+    targetRegions: ["Occitanie"],
     minAmountEur: null,
     maxAmountEur: a.maxAmountEur,
     coFinancingRequired: true,

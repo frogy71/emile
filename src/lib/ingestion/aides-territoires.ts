@@ -54,7 +54,11 @@ export interface AideTerritoireRaw {
   short_title: string;
   description: string;
   eligibility: string;
-  perimeter: string;
+  perimeter: string | null;
+  perimeter_scale?: string | null;
+  perimeter_code?: string | null;
+  region?: string | null;
+  region_code?: string | null;
   financers: NameLike[];
   financers_full?: { id: number; name: string }[];
   instructors: NameLike[];
@@ -73,12 +77,30 @@ export interface AideTerritoireRaw {
   loan_amount: number | null;
   recoverable_advance_amount: number | null;
   contact: string;
-  origin_url: string;
-  application_url: string;
+  origin_url: string | null;
+  application_url: string | null;
   is_call_for_project: boolean;
   programs: string[];
   date_created: string;
   date_updated: string;
+}
+
+const AIDES_TERRITOIRES_BASE = "https://aides-territoires.beta.gouv.fr";
+
+/**
+ * Coerce a possibly-relative URL into an absolute one. Aides-Territoires
+ * returns `url` as a path like "/aides/abc/", and `origin_url` is sometimes
+ * null. We never want to land relative URLs in the DB — the detail page,
+ * email links and enricher all dereference source_url directly.
+ */
+function toAbsoluteUrl(u: string | null | undefined): string | null {
+  if (!u) return null;
+  const trimmed = u.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/")) return `${AIDES_TERRITOIRES_BASE}${trimmed}`;
+  // Bare path or domain-less reference — defensively prefix with /.
+  return `${AIDES_TERRITOIRES_BASE}/${trimmed}`;
 }
 
 export interface AideTerritoireResponse {
@@ -279,8 +301,24 @@ export function transformToGrant(raw: AideTerritoireRaw) {
   else if (/ingénier|conseil|accompagn/.test(aidTypeText) && !raw.is_call_for_project)
     grantType = "ingenierie";
 
+  // Geographic targeting. perimeter_scale is "Pays" / "Région" / "Département"
+  // / "epci" / "Bassin hydrographique" / "Ad-hoc" / null. We only set
+  // target_regions when the grant is bound to a specific French region — for
+  // national ("Pays") aids we leave it null so the matcher treats them as
+  // accessible from anywhere in France.
+  const targetRegions = computeTargetRegions(raw);
+
+  // Always emit absolute URLs. raw.url is a relative path; origin_url is
+  // sometimes null. Falling back to raw.url without normalising used to land
+  // ~200 grants in the DB with paths like "/aides/abc/" that 404 when
+  // clicked from the app or the alert email.
+  const sourceUrl =
+    toAbsoluteUrl(raw.origin_url) ||
+    toAbsoluteUrl(raw.application_url) ||
+    toAbsoluteUrl(raw.url);
+
   return {
-    sourceUrl: raw.origin_url || raw.application_url || raw.url,
+    sourceUrl,
     sourceName: "Aides-Territoires",
     title: raw.name || raw.short_title,
     summary: cleanHtml(raw.description)?.slice(0, 500) || null,
@@ -290,6 +328,7 @@ export function transformToGrant(raw: AideTerritoireRaw) {
     thematicAreas,
     eligibleEntities,
     eligibleCountries: ["FR"],
+    targetRegions,
     minAmountEur: null,
     maxAmountEur,
     coFinancingRequired:
@@ -303,11 +342,46 @@ export function transformToGrant(raw: AideTerritoireRaw) {
     // Structured enrichment — pre-fill what the API already knows so the LLM
     // pass only has to handle difficulty and the document checklist.
     openDate,
-    applicationUrl: raw.application_url || null,
+    applicationUrl: toAbsoluteUrl(raw.application_url),
     contactInfo: raw.contact?.trim() || null,
     coFinancingPct,
     eligibilityConditions,
   };
+}
+
+/**
+ * Map an Aides-Territoires perimeter onto the French region(s) it belongs to,
+ * or null when the aid is national / scope unknown. We always reduce to the
+ * region tier — département/EPCI/bassin perimeters get rolled up to their
+ * parent region so the matcher only has to reason about regions.
+ */
+function computeTargetRegions(raw: AideTerritoireRaw): string[] | null {
+  const scale = (raw.perimeter_scale || "").toLowerCase();
+  const perimeter = raw.perimeter?.trim() || null;
+  const region = raw.region?.trim() || null;
+
+  if (!perimeter && !region) return null;
+
+  // National aids — perimeter is "France" or scale is "Pays".
+  if (
+    scale === "pays" ||
+    perimeter === "France" ||
+    perimeter === "France entière" ||
+    raw.perimeter_code === "FRA"
+  ) {
+    return null;
+  }
+
+  if (scale === "région" || scale === "region") {
+    return perimeter ? [perimeter] : null;
+  }
+
+  // Département, EPCI, Bassin hydrographique, Ad-hoc, etc — fall back to the
+  // attached parent region when we have one. Without a parent we keep the
+  // perimeter string so the matcher can still detect a non-national scope.
+  if (region) return [region];
+  if (perimeter && perimeter !== "France") return [perimeter];
+  return null;
 }
 
 /**

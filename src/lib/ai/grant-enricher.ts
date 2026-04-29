@@ -16,8 +16,9 @@
 
 import { logAiUsage } from "./usage-tracker";
 
-// Public Haiku model ID — same one used by scoring.ts.
-const ENRICHER_MODEL = "claude-haiku-4-5-20250315";
+// Public Haiku model ID — same family as scoring.ts. Pinned to the
+// 2025-10-01 release because it's the latest stable Haiku 4.5.
+const ENRICHER_MODEL = "claude-haiku-4-5-20251001";
 
 // Cap on the page content we feed Haiku. ~30k chars ≈ 7-8k tokens — plenty
 // for a typical grant page once HTML is stripped, and well under Haiku's

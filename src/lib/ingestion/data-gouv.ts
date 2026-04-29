@@ -70,7 +70,11 @@ export function transformFRUPToGrant(row: Record<string, unknown>, index: number
   const themes = detectThemes(`${name} ${objet}`);
 
   return {
-    sourceUrl: `https://data.gouv.fr/frup/${encodeURIComponent(name.slice(0, 100))}`,
+    // Anchor the source URL at the real data.gouv.fr dataset page (the only
+    // page that actually exists for FRUP) and disambiguate per fondation
+    // through a query param so the unique constraint still holds. Using a
+    // fragment instead would lose the disambiguator on PostgREST upserts.
+    sourceUrl: `https://www.data.gouv.fr/fr/datasets/fondations-reconnues-d-utilite-publique/?fondation=${encodeURIComponent(name.slice(0, 200))}`,
     sourceName: "data.gouv.fr — FRUP",
     title: name.slice(0, 300),
     summary: objet
@@ -82,6 +86,7 @@ export function transformFRUPToGrant(row: Record<string, unknown>, index: number
     thematicAreas: themes,
     eligibleEntities: ["association", "ong"],
     eligibleCountries: ["FR"],
+    targetRegions: null,
     minAmountEur: null,
     maxAmountEur: null,
     coFinancingRequired: false,
@@ -117,7 +122,7 @@ export function transformFEToGrant(row: Record<string, unknown>, index: number) 
   const themes = detectThemes(`${name} ${objet}`);
 
   return {
-    sourceUrl: `https://data.gouv.fr/fe/${encodeURIComponent(name.slice(0, 100))}`,
+    sourceUrl: `https://www.data.gouv.fr/fr/datasets/fondations-d-entreprises/?fondation=${encodeURIComponent(name.slice(0, 200))}`,
     sourceName: "data.gouv.fr — Fondations entreprises",
     title: name.slice(0, 300),
     summary: objet
@@ -129,6 +134,7 @@ export function transformFEToGrant(row: Record<string, unknown>, index: number) 
     thematicAreas: themes,
     eligibleEntities: ["association", "ong"],
     eligibleCountries: ["FR"],
+    targetRegions: null,
     minAmountEur: null,
     maxAmountEur: null,
     coFinancingRequired: false,

@@ -796,6 +796,7 @@ export function transformRegionToGrant(p: RegionProgram) {
     thematicAreas: p.themes,
     eligibleEntities: p.eligibleEntities ?? ["association", "collectivite", "entreprise"],
     eligibleCountries: ["FR"],
+    targetRegions: [p.region],
     minAmountEur: p.minAmountEur ?? 5000,
     maxAmountEur: p.maxAmountEur ?? 100000,
     coFinancingRequired: true,

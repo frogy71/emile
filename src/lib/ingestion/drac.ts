@@ -325,6 +325,7 @@ export function transformDRACToGrant(p: DRACProgram) {
     thematicAreas: p.themes,
     eligibleEntities: p.eligibleEntities ?? ["association", "collectivite"],
     eligibleCountries: ["FR"],
+    targetRegions: p.region ? [p.region] : null,
     minAmountEur: p.minAmountEur ?? 2000,
     maxAmountEur: p.maxAmountEur ?? 100000,
     coFinancingRequired: true,

@@ -96,6 +96,7 @@ import {
   isEmbeddingsAvailable,
   toPgVector,
 } from "../ai/embeddings";
+import { enrichGrantsBatch } from "../ai/grant-enricher";
 
 export type IngestionTrigger =
   | "manual"
@@ -302,6 +303,7 @@ async function upsertGrants(
         row.required_documents = g.requiredDocuments;
       }
       if (g.difficultyLevel !== undefined) row.difficulty_level = g.difficultyLevel;
+      if (g.targetRegions !== undefined) row.target_regions = g.targetRegions;
       return row;
     });
 
@@ -980,6 +982,22 @@ export async function runIngestion(
   for (const spec of selected) {
     const result = await ingestSource(runId, spec.name, trigger, spec);
     sources.push(result);
+  }
+
+  // Drain a slice of the enrichment queue right after a successful run.
+  // Best-effort — failures here never bubble up to the ingest result. The
+  // dedicated enrich-grants cron is the durable backstop; this hook just
+  // means "newly inserted grant becomes useful inside ~5 minutes" instead of
+  // "newly inserted grant waits up to 6h for the next cron tick". Capped at
+  // 25 so a daily ingest of ~30 fresh grants drains in one shot, without
+  // blowing the function's 300s budget when the catalog is at peak load.
+  try {
+    await enrichGrantsBatch(25);
+  } catch (e) {
+    console.warn(
+      "[Ingestion] post-ingest enrichment slice failed (non-fatal):",
+      e instanceof Error ? e.message : e
+    );
   }
 
   const completedAt = new Date().toISOString();

@@ -197,6 +197,16 @@ export default function AdminDashboard() {
   const [health, setHealth] = useState<IngestionHealth | null>(null);
   const [foundationHealth, setFoundationHealth] =
     useState<FoundationHealthResponse | null>(null);
+  const [enrichment, setEnrichment] = useState<{
+    total: number;
+    enriched: number;
+    unenriched: number;
+    progress_pct: number;
+    last_enriched_at: string | null;
+    backlog_warning: boolean;
+    backlog_critical: boolean;
+  } | null>(null);
+  const [enriching, setEnriching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,7 +215,56 @@ export default function AdminDashboard() {
     fetchStats();
     fetchIngestionHealth();
     fetchFoundationHealth();
+    fetchEnrichmentStatus();
   }, []);
+
+  async function fetchEnrichmentStatus() {
+    try {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const res = await fetch("/api/admin/enrichment-status", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      setEnrichment(await res.json());
+    } catch (e) {
+      console.error("Failed to load enrichment status:", e);
+    }
+  }
+
+  async function triggerEnrichment() {
+    setEnriching(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        alert("Session expirée — reconnectez-vous");
+        return;
+      }
+      const res = await fetch("/api/admin/enrichment-status", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        alert(`Erreur : ${data?.error || `HTTP ${res.status}`}`);
+      } else {
+        alert(
+          `Enrichissement OK (${data.duration_seconds}s)\n${data.processed} traités · ${data.ok} succès · ${data.failed} échecs`
+        );
+      }
+      fetchEnrichmentStatus();
+      fetchStats();
+    } catch (e) {
+      alert(`Erreur réseau : ${e instanceof Error ? e.message : "inconnue"}`);
+    }
+    setEnriching(false);
+  }
 
   async function fetchIngestionHealth() {
     try {
@@ -842,6 +901,84 @@ export default function AdminDashboard() {
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Enrichment progress — runs every 6h via cron, drains the
+          enriched_at IS NULL queue at 50/run */}
+      <h2 className="text-xl font-black mb-4">Enrichissement IA</h2>
+      <div className="mb-8">
+        {enrichment ? (
+          <div
+            className={`rounded-2xl border-2 border-border p-5 shadow-[4px_4px_0px_0px_#1a1a1a] ${
+              enrichment.backlog_critical
+                ? "bg-red-100"
+                : enrichment.backlog_warning
+                  ? "bg-[#ffe066]"
+                  : "bg-card"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex-1 min-w-[260px]">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="h-5 w-5" />
+                  <span className="text-sm font-bold text-muted-foreground">
+                    Enrichissement IA
+                  </span>
+                  {enrichment.backlog_critical && (
+                    <Badge variant="pink">backlog critique</Badge>
+                  )}
+                  {!enrichment.backlog_critical && enrichment.backlog_warning && (
+                    <Badge variant="yellow">backlog</Badge>
+                  )}
+                </div>
+                <p className="text-3xl font-black">
+                  {enrichment.enriched.toLocaleString("fr-FR")} /
+                  {" "}
+                  {enrichment.total.toLocaleString("fr-FR")}
+                  <span className="ml-2 text-base font-bold text-muted-foreground">
+                    ({enrichment.progress_pct}%)
+                  </span>
+                </p>
+                <p className="text-sm font-bold text-muted-foreground mt-1">
+                  {enrichment.unenriched.toLocaleString("fr-FR")} grants non
+                  enrichis · le cron en traite 50 toutes les 6h
+                </p>
+                {enrichment.last_enriched_at && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Dernier enrichissement :{" "}
+                    {new Date(enrichment.last_enriched_at).toLocaleString(
+                      "fr-FR"
+                    )}
+                  </p>
+                )}
+                <div className="mt-3 h-3 w-full rounded-full border-2 border-border bg-white overflow-hidden">
+                  <div
+                    className="h-full bg-[#c8f76f]"
+                    style={{ width: `${enrichment.progress_pct}%` }}
+                  />
+                </div>
+              </div>
+              <Button
+                variant="accent"
+                onClick={triggerEnrichment}
+                disabled={enriching || enrichment.unenriched === 0}
+              >
+                <Zap
+                  className={`h-4 w-4 ${enriching ? "animate-spin" : ""}`}
+                />
+                {enriching
+                  ? "Enrichissement..."
+                  : "Lancer l'enrichissement (50)"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border-2 border-border bg-card p-5 shadow-[4px_4px_0px_0px_#1a1a1a]">
+            <p className="text-sm text-muted-foreground font-bold">
+              Chargement...
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Ingestion health — per-source live status */}

@@ -144,25 +144,25 @@ const STRUCTURED_DATA = {
 const DIFFERENTIATORS = [
   {
     icon: Search,
-    title: "Le plus grand répertoire francophone et européen",
+    tagline: "Le plus grand répertoire français de subventions.",
     body: "6 279 subventions, 33 sources publiques et privées — France, Europe, fondations. Personne d'autre n'a cette couverture.",
     color: "bg-[#c8f76f]",
   },
   {
     icon: Brain,
-    title: "Un matching IA qui comprend votre projet",
+    tagline: "Le matching IA le plus puissant (on l'a volé à Tinder… Chut).",
     body: "Embeddings sémantiques : Emile saisit le sens de ce que vous écrivez, même avec des fautes. Plus de filtres rigides, plus de mots-clés à deviner.",
     color: "bg-[#ffe066]",
   },
   {
     icon: KanbanSquare,
-    title: "Un pipeline visuel pour gérer vos candidatures",
+    tagline: "La gestion visuelle de toutes vos subventions.",
     body: "Kanban intégré : suivi de A à Z, de la veille au dépôt. Aucun autre outil de recherche de subventions ne propose ça.",
     color: "bg-[#ffa3d1]",
   },
   {
     icon: FileText,
-    title: "Des dossiers générés par IA en un clic",
+    tagline: "La génération de dossier en un clic.",
     body: "Brouillon structuré, adapté à chaque appel à projets. Vous gagnez des jours de rédaction, vous gardez le ton et l'expertise.",
     color: "bg-[#a3d5ff]",
   },
@@ -440,19 +440,14 @@ export default function LandingPage() {
             La solution
           </Badge>
           <h2 className="text-4xl font-black text-foreground md:text-5xl">
-            Emile — Le seul outil qui trouve, matche et rédige vos demandes de
-            subvention — automatiquement.
+            Emile — Le seul outil qui trouve, matche, gère et rédige vos
+            demandes de subvention — automatiquement.
           </h2>
-          <p className="mt-4 max-w-3xl text-lg text-muted-foreground font-medium md:text-xl">
-            Le plus grand répertoire français de subventions. Le matching IA le
-            plus puissant (on l&apos;a volé à Tinder… Chut). La gestion visuelle
-            de toutes vos subventions. Et la génération de dossier en un clic.
-          </p>
 
           <div className="mt-12 grid gap-5 md:grid-cols-2">
             {DIFFERENTIATORS.map((d) => (
               <div
-                key={d.title}
+                key={d.tagline}
                 className="rounded-2xl border-2 border-border bg-card p-6 shadow-[4px_4px_0px_0px_#1a1a1a]"
               >
                 <div
@@ -460,10 +455,10 @@ export default function LandingPage() {
                 >
                   <d.icon className="h-6 w-6" strokeWidth={2.5} />
                 </div>
-                <h3 className="mt-5 text-xl font-black leading-tight">
-                  {d.title}
+                <h3 className="mt-5 text-2xl font-black leading-tight text-foreground">
+                  {d.tagline}
                 </h3>
-                <p className="mt-2 text-sm font-medium text-muted-foreground">
+                <p className="mt-3 text-sm font-medium text-muted-foreground">
                   {d.body}
                 </p>
               </div>

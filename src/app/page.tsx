@@ -440,7 +440,8 @@ export default function LandingPage() {
             La solution
           </Badge>
           <h2 className="text-4xl font-black text-foreground md:text-5xl">
-            Emile combine ce que personne d&apos;autre ne fait.
+            Emile — Le seul outil qui trouve, matche et rédige vos demandes de
+            subvention — automatiquement.
           </h2>
           <p className="mt-4 max-w-3xl text-lg text-muted-foreground font-medium md:text-xl">
             Le plus grand répertoire français de subventions. Le matching IA le

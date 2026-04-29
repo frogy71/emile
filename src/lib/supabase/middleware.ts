@@ -48,12 +48,18 @@ export async function updateSession(request: NextRequest) {
   // so the form is the very first thing prospects see.
   const publicRoutes = ["/", "/login", "/signup", "/pricing", "/try", "/essai", "/auth/callback"];
   // Public API routes (webhooks, cron jobs, ingestion, organic feed for Botato)
-  const publicApiRoutes = ["/api/stripe/webhook", "/api/alerts", "/api/alerts/send", "/api/ingest", "/api/cron", "/api/stats", "/api/carousels"];
+  const publicApiRoutes = ["/api/stripe/webhook", "/api/alerts", "/api/alerts/send", "/api/ingest", "/api/cron", "/api/stats", "/api/carousels", "/api/blog/", "/api/indexnow-key"];
+  // SEO crawler files must be reachable anonymously, regardless of auth.
+  const seoCrawlerPaths = ["/sitemap.xml", "/robots.txt"];
+
   const isPublicRoute = publicRoutes.some(
     (route) => request.nextUrl.pathname === route
   ) ||
+    seoCrawlerPaths.includes(request.nextUrl.pathname) ||
     request.nextUrl.pathname.startsWith("/auth/") ||
     request.nextUrl.pathname.startsWith("/legal/") ||
+    request.nextUrl.pathname === "/blog" ||
+    request.nextUrl.pathname.startsWith("/blog/") ||
     publicApiRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
 
   if (!user && !isPublicRoute) {

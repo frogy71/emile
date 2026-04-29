@@ -26,6 +26,7 @@ import {
   Mail,
 } from "lucide-react";
 import { EmailSequenceDashboard } from "@/components/email-sequence-dashboard";
+import { BlogDashboard } from "@/components/blog-dashboard";
 
 interface SourceStat {
   name: string;
@@ -480,6 +481,9 @@ export default function AdminDashboard() {
 
       {/* Email conversion engine — Free → Pro nurture sequence */}
       <EmailSequenceDashboard />
+
+      {/* Blog engine — Grant du Jour SEO */}
+      <BlogDashboard />
 
       {/* Activité récente */}
       <h2 className="text-xl font-black mb-4">Activité récente</h2>

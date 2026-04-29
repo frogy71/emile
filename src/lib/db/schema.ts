@@ -219,6 +219,51 @@ export const emailSequenceQueue = pgTable("email_sequence_queue", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ─── Blog engine (Grant du Jour SEO articles) ───────────────────
+export const blogPosts = pgTable("blog_posts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  grantId: uuid("grant_id"),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  metaTitle: text("meta_title"),
+  metaDescription: text("meta_description"),
+  bodyHtml: text("body_html").notNull(),
+  ctaBlock: text("cta_block"),
+  faqSchema: jsonb("faq_schema"),
+  coverImageUrl: text("cover_image_url"),
+  thematicTag: text("thematic_tag"),
+  keywords: text("keywords").array(),
+  status: text("status").default("draft").notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+  viewCount: integer("view_count").default(0).notNull(),
+  ctaClicks: integer("cta_clicks").default(0).notNull(),
+  wordCount: integer("word_count"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const blogGenerationLogs = pgTable("blog_generation_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  grantId: uuid("grant_id"),
+  status: text("status").notNull(),
+  wordCount: integer("word_count"),
+  generatedAt: timestamp("generated_at", { withTimezone: true }).defaultNow().notNull(),
+  errorMessage: text("error_message"),
+});
+
+export const blogCtaTemplates = pgTable("blog_cta_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  titleTemplate: text("title_template").notNull(),
+  bodyText: text("body_text").notNull(),
+  ctaButtonLabel: text("cta_button_label").default("Trouver mes grants →").notNull(),
+  logframeEmbedUrl: text("logframe_embed_url"),
+  reassuranceLine: text("reassurance_line").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Type exports ────────────────────────────────────────────────
 export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
@@ -236,3 +281,9 @@ export type EmailSequenceTemplate = typeof emailSequenceTemplates.$inferSelect;
 export type NewEmailSequenceTemplate = typeof emailSequenceTemplates.$inferInsert;
 export type EmailSequenceQueueItem = typeof emailSequenceQueue.$inferSelect;
 export type NewEmailSequenceQueueItem = typeof emailSequenceQueue.$inferInsert;
+export type BlogPost = typeof blogPosts.$inferSelect;
+export type NewBlogPost = typeof blogPosts.$inferInsert;
+export type BlogGenerationLog = typeof blogGenerationLogs.$inferSelect;
+export type NewBlogGenerationLog = typeof blogGenerationLogs.$inferInsert;
+export type BlogCtaTemplate = typeof blogCtaTemplates.$inferSelect;
+export type NewBlogCtaTemplate = typeof blogCtaTemplates.$inferInsert;

@@ -440,8 +440,8 @@ export default function LandingPage() {
             La solution
           </Badge>
           <h2 className="text-4xl font-black text-foreground md:text-5xl">
-            Emile — Le seul outil qui trouve, matche, gère et rédige vos
-            demandes de subvention — automatiquement.
+            Emile. Le seul outil qui trouve, matche, gère et rédige vos
+            demandes de subvention. Automatiquement.
           </h2>
 
           <div className="mt-12 grid gap-5 md:grid-cols-2">
@@ -580,7 +580,7 @@ export default function LandingPage() {
               Décrivez votre projet.
             </h2>
             <p className="mt-4 text-lg font-medium text-muted-foreground md:text-xl">
-              Six questions. Quelques minutes. Notre IA croise vos réponses avec
+              Six questions. Moins de 2 min. Notre IA croise vos réponses avec
               {" "}
               {stats ? formatGrantCount(stats.count) : "6 000+"} subventions FR
               &amp; UE.

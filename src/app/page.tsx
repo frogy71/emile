@@ -464,102 +464,6 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-
-          {/* Card-based comparison — feels like an app store, not a spreadsheet */}
-          <div className="mt-16">
-            <h3 className="text-2xl font-black text-foreground md:text-3xl">
-              Emile vs les alternatives
-            </h3>
-            <p className="mt-2 text-base text-muted-foreground font-medium">
-              Comparez. Choisissez. Décrochez.
-            </p>
-
-            <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-              {PROVIDERS.map((p) => {
-                const flags = PROVIDER_FEATURES[p.key];
-                return (
-                  <div
-                    key={p.key}
-                    className={`relative rounded-2xl border-2 bg-card p-6 shadow-[4px_4px_0px_0px_#1a1a1a] ${
-                      p.highlight
-                        ? "border-[#7bc618] ring-4 ring-[#c8f76f]"
-                        : "border-border"
-                    }`}
-                  >
-                    {p.badge && (
-                      <Badge
-                        variant="default"
-                        className="absolute -top-3 left-1/2 -translate-x-1/2 bg-foreground text-background px-3 py-1 text-[10px] font-black"
-                      >
-                        {p.badge}
-                      </Badge>
-                    )}
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xl font-black tracking-tight text-foreground">
-                        {p.name}
-                      </span>
-                      {p.key === "emile" && (
-                        <span className="rounded-md bg-foreground px-1.5 text-base text-[#c8f76f]">
-                          .
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                      {p.tagline}
-                    </p>
-
-                    <ul className="mt-5 space-y-3">
-                      {FEATURES.map((f, i) => {
-                        const ok = flags[i];
-                        return (
-                          <li
-                            key={f.label}
-                            className="flex items-start gap-2.5"
-                          >
-                            <span
-                              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 border-border ${
-                                ok ? "bg-[#c8f76f]" : "bg-card"
-                              }`}
-                            >
-                              {ok ? (
-                                <Check
-                                  className="h-3 w-3 text-foreground"
-                                  strokeWidth={3.5}
-                                />
-                              ) : (
-                                <X
-                                  className="h-3 w-3 text-rose-500"
-                                  strokeWidth={3.5}
-                                />
-                              )}
-                            </span>
-                            <span
-                              className={`text-sm leading-tight ${
-                                ok
-                                  ? "font-bold text-foreground"
-                                  : "font-medium text-muted-foreground"
-                              }`}
-                            >
-                              {f.label}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-
-                    <div className="mt-6 border-t-2 border-border pt-4">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Prix
-                      </p>
-                      <p className="mt-1 text-base font-black text-foreground">
-                        {p.price}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </div>
       </section>
 
@@ -641,6 +545,104 @@ export default function LandingPage() {
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 6. EMILE VS ALTERNATIVES — card-based comparison */}
+      <section className="border-t-2 border-border bg-card py-16 md:py-20">
+        <div className="mx-auto max-w-6xl px-6">
+          <h2 className="text-4xl font-black text-foreground md:text-5xl">
+            Emile vs les alternatives
+          </h2>
+          <p className="mt-2 text-base text-muted-foreground font-medium">
+            Comparez. Choisissez. Décrochez.
+          </p>
+
+          <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+            {PROVIDERS.map((p) => {
+              const flags = PROVIDER_FEATURES[p.key];
+              return (
+                <div
+                  key={p.key}
+                  className={`relative rounded-2xl border-2 bg-card p-6 shadow-[4px_4px_0px_0px_#1a1a1a] ${
+                    p.highlight
+                      ? "border-[#7bc618] ring-4 ring-[#c8f76f]"
+                      : "border-border"
+                  }`}
+                >
+                  {p.badge && (
+                    <Badge
+                      variant="default"
+                      className="absolute -top-3 left-1/2 -translate-x-1/2 bg-foreground text-background px-3 py-1 text-[10px] font-black"
+                    >
+                      {p.badge}
+                    </Badge>
+                  )}
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-xl font-black tracking-tight text-foreground">
+                      {p.name}
+                    </span>
+                    {p.key === "emile" && (
+                      <span className="rounded-md bg-foreground px-1.5 text-base text-[#c8f76f]">
+                        .
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    {p.tagline}
+                  </p>
+
+                  <ul className="mt-5 space-y-3">
+                    {FEATURES.map((f, i) => {
+                      const ok = flags[i];
+                      return (
+                        <li
+                          key={f.label}
+                          className="flex items-start gap-2.5"
+                        >
+                          <span
+                            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 border-border ${
+                              ok ? "bg-[#c8f76f]" : "bg-card"
+                            }`}
+                          >
+                            {ok ? (
+                              <Check
+                                className="h-3 w-3 text-foreground"
+                                strokeWidth={3.5}
+                              />
+                            ) : (
+                              <X
+                                className="h-3 w-3 text-rose-500"
+                                strokeWidth={3.5}
+                              />
+                            )}
+                          </span>
+                          <span
+                            className={`text-sm leading-tight ${
+                              ok
+                                ? "font-bold text-foreground"
+                                : "font-medium text-muted-foreground"
+                            }`}
+                          >
+                            {f.label}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <div className="mt-6 border-t-2 border-border pt-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Prix
+                    </p>
+                    <p className="mt-1 text-base font-black text-foreground">
+                      {p.price}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

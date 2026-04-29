@@ -47,8 +47,8 @@ export async function updateSession(request: NextRequest) {
   // in describing their project. We deliberately keep these routes open
   // so the form is the very first thing prospects see.
   const publicRoutes = ["/", "/login", "/signup", "/pricing", "/try", "/essai", "/auth/callback"];
-  // Public API routes (webhooks, cron jobs, ingestion)
-  const publicApiRoutes = ["/api/stripe/webhook", "/api/alerts", "/api/alerts/send", "/api/ingest", "/api/cron", "/api/stats"];
+  // Public API routes (webhooks, cron jobs, ingestion, organic feed for Botato)
+  const publicApiRoutes = ["/api/stripe/webhook", "/api/alerts", "/api/alerts/send", "/api/ingest", "/api/cron", "/api/stats", "/api/carousels"];
   const isPublicRoute = publicRoutes.some(
     (route) => request.nextUrl.pathname === route
   ) ||

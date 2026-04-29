@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 import {
   BarChart3,
   Users,
@@ -21,6 +22,7 @@ import {
   Zap,
   Sparkles,
   DollarSign,
+  Image as ImageIcon,
 } from "lucide-react";
 
 interface SourceStat {
@@ -383,7 +385,13 @@ export default function AdminDashboard() {
             Contrôle business, données et performance
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Link href="/admin/carousels">
+            <Button variant="outline">
+              <ImageIcon className="h-4 w-4" />
+              Carousel Maker
+            </Button>
+          </Link>
           <Button
             variant="outline"
             onClick={() => triggerUpdate("cleanup")}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import {
   Sparkles,
@@ -16,7 +17,33 @@ import {
   Cloud,
   Folder,
   Link as LinkIcon,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  Send,
+  Eye,
+  EyeOff,
 } from "lucide-react";
+
+const BOTATO_STORAGE_KEY = "grant-finder.botato-config";
+
+interface BotatoConfig {
+  apiKey: string;
+  instagramAccountId: string;
+  linkedinCompanyId: string;
+  tiktokAccountId: string;
+  twitterAccountId: string;
+  facebookPageId: string;
+}
+
+const EMPTY_BOTATO_CONFIG: BotatoConfig = {
+  apiKey: "",
+  instagramAccountId: "",
+  linkedinCompanyId: "",
+  tiktokAccountId: "",
+  twitterAccountId: "",
+  facebookPageId: "",
+};
 
 interface CarouselPreview {
   grantId: string;
@@ -67,6 +94,34 @@ export default function CarouselMakerPage() {
   const [publishing, setPublishing] = useState(false);
   const [savingDropbox, setSavingDropbox] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [configSaved, setConfigSaved] = useState(false);
+  const [botatoConfig, setBotatoConfig] = useState<BotatoConfig>(() => {
+    if (typeof window === "undefined") return EMPTY_BOTATO_CONFIG;
+    try {
+      const raw = window.localStorage.getItem(BOTATO_STORAGE_KEY);
+      if (!raw) return EMPTY_BOTATO_CONFIG;
+      const parsed = JSON.parse(raw) as Partial<BotatoConfig>;
+      return { ...EMPTY_BOTATO_CONFIG, ...parsed };
+    } catch {
+      return EMPTY_BOTATO_CONFIG;
+    }
+  });
+
+  function updateBotatoField(field: keyof BotatoConfig, value: string) {
+    setBotatoConfig((prev) => ({ ...prev, [field]: value }));
+    setConfigSaved(false);
+  }
+
+  function saveBotatoConfig() {
+    window.localStorage.setItem(
+      BOTATO_STORAGE_KEY,
+      JSON.stringify(botatoConfig)
+    );
+    setConfigSaved(true);
+    setTimeout(() => setConfigSaved(false), 2000);
+  }
 
   async function withSession(): Promise<string | null> {
     const supabase = createClient();
@@ -232,6 +287,18 @@ export default function CarouselMakerPage() {
               />
               {publishing ? "Publication..." : "Publier (Supabase + API)"}
             </Button>
+            <div className="relative inline-flex">
+              <Button variant="outline" disabled className="opacity-60">
+                <Send className="h-4 w-4" />
+                Publier sur les réseaux
+              </Button>
+              <Badge
+                variant="yellow"
+                className="absolute -top-2 -right-2 text-[10px] px-1.5 py-0 leading-tight"
+              >
+                Bientôt disponible
+              </Badge>
+            </div>
             <Button variant="outline" onClick={saveDropbox} disabled={busy}>
               <Save className={`h-4 w-4 ${savingDropbox ? "animate-spin" : ""}`} />
               {savingDropbox ? "Export..." : "Export Dropbox (fallback)"}
@@ -366,6 +433,153 @@ export default function CarouselMakerPage() {
           ))}
         </div>
       )}
+
+      <div className="mt-10 rounded-2xl border-2 border-border bg-card shadow-[4px_4px_0px_0px_#1a1a1a] overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setConfigOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-muted/40 transition-colors"
+          aria-expanded={configOpen}
+        >
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg border-2 border-border bg-[#a3d5ff] p-2">
+              <Settings className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-base font-black text-foreground">
+                Configuration Botato
+              </p>
+              <p className="text-xs text-muted-foreground font-medium">
+                Clé API et IDs des comptes sociaux
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="hidden sm:inline-flex">
+              {configOpen ? "Réduire" : "Déplier"}
+            </Badge>
+            {configOpen ? (
+              <ChevronUp className="h-5 w-5" />
+            ) : (
+              <ChevronDown className="h-5 w-5" />
+            )}
+          </div>
+        </button>
+
+        {configOpen && (
+          <div className="border-t-2 border-border p-5 space-y-5">
+            <p className="text-xs font-bold text-muted-foreground bg-muted/40 border-2 border-border rounded-xl px-3 py-2">
+              Ces paramètres seront utilisés pour publier automatiquement via
+              Botato.
+            </p>
+
+            <div>
+              <label className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-1.5 block">
+                Botato API Key
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  type={showApiKey ? "text" : "password"}
+                  value={botatoConfig.apiKey}
+                  onChange={(e) => updateBotatoField("apiKey", e.target.value)}
+                  placeholder="botato_sk_..."
+                  className="font-mono"
+                  autoComplete="off"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowApiKey((v) => !v)}
+                  className="shrink-0"
+                  aria-label={
+                    showApiKey ? "Masquer la clé" : "Afficher la clé"
+                  }
+                >
+                  {showApiKey ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-1.5 block">
+                  Instagram Account ID
+                </label>
+                <Input
+                  value={botatoConfig.instagramAccountId}
+                  onChange={(e) =>
+                    updateBotatoField("instagramAccountId", e.target.value)
+                  }
+                  placeholder="178414...XXXX"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-1.5 block">
+                  LinkedIn Company ID
+                </label>
+                <Input
+                  value={botatoConfig.linkedinCompanyId}
+                  onChange={(e) =>
+                    updateBotatoField("linkedinCompanyId", e.target.value)
+                  }
+                  placeholder="urn:li:organization:..."
+                />
+              </div>
+              <div>
+                <label className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-1.5 block">
+                  TikTok Account ID
+                </label>
+                <Input
+                  value={botatoConfig.tiktokAccountId}
+                  onChange={(e) =>
+                    updateBotatoField("tiktokAccountId", e.target.value)
+                  }
+                  placeholder="@compte ou ID numérique"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-1.5 block">
+                  Twitter / X Account ID
+                </label>
+                <Input
+                  value={botatoConfig.twitterAccountId}
+                  onChange={(e) =>
+                    updateBotatoField("twitterAccountId", e.target.value)
+                  }
+                  placeholder="@handle ou ID"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-1.5 block">
+                  Facebook Page ID
+                </label>
+                <Input
+                  value={botatoConfig.facebookPageId}
+                  onChange={(e) =>
+                    updateBotatoField("facebookPageId", e.target.value)
+                  }
+                  placeholder="1234567890..."
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap pt-2">
+              <Button variant="default" onClick={saveBotatoConfig}>
+                <Save className="h-4 w-4" />
+                {configSaved ? "Enregistré ✓" : "Enregistrer"}
+              </Button>
+              <p className="text-xs text-muted-foreground font-medium">
+                Stocké localement (localStorage). Migration vers variables
+                d&apos;environnement à venir.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

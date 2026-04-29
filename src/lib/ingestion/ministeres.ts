@@ -284,6 +284,46 @@ const MINISTERIAL_PROGRAMS: MinisterialProgram[] = [
     funder: "OIF",
     maxAmountEur: 100000,
   },
+  {
+    url: "https://www.diplomatie.gouv.fr/fr/dossiers-pays/europe/",
+    title: "MEAE — Soutien aux acteurs européens et bilatéraux",
+    summary:
+      "Soutien du MEAE aux projets associatifs portant sur la coopération bilatérale européenne, la mémoire, l'amitié entre les peuples et les actions de société civile vers les pays voisins de l'UE.",
+    themes: ["Europe", "Coopération", "Mémoire"],
+    funder: "MEAE",
+    eligibleEntities: ["association", "ong"],
+    maxAmountEur: 100000,
+  },
+  {
+    url: "https://www.diplomatie.gouv.fr/fr/politique-etrangere-de-la-france/diplomatie-feministe/",
+    title: "MEAE — Diplomatie féministe & droits des femmes",
+    summary:
+      "Appels à projets du MEAE pour soutenir les organisations engagées sur les droits des femmes, l'égalité de genre et la lutte contre les violences sexistes à l'international.",
+    themes: ["Droits humains", "Égalité", "Solidarité internationale"],
+    funder: "MEAE",
+    eligibleEntities: ["association", "ong"],
+    maxAmountEur: 200000,
+  },
+  {
+    url: "https://www.diplomatie.gouv.fr/fr/politique-etrangere-de-la-france/aide-au-developpement/dispositifs-pour-les-acteurs-de-la-cooperation/le-soutien-aux-collectivites-territoriales-engagees-dans-la-cooperation-decentralisee/",
+    title: "MEAE — DCTIV / Coopération décentralisée des collectivités",
+    summary:
+      "Appels à projets de la DCTIV (Direction de la Coopération et de la Transformation Interministérielle Verte / délégation pour l'action extérieure des collectivités territoriales) pour cofinancer les projets de coopération décentralisée des collectivités françaises avec leurs partenaires étrangers.",
+    themes: ["Coopération", "Solidarité internationale", "Transition écologique"],
+    funder: "MEAE — DCTIV / DAECT",
+    eligibleEntities: ["collectivite", "association"],
+    maxAmountEur: 200000,
+  },
+  {
+    url: "https://www.diplomatie.gouv.fr/fr/politique-etrangere-de-la-france/aide-au-developpement/dispositifs-pour-les-acteurs-de-la-cooperation/transition-ecologique-et-climat/",
+    title: "MEAE — DCTIV : Transition écologique et climat",
+    summary:
+      "Volet « Transformation interministérielle verte » de la DCTIV : cofinancement des projets de coopération internationale des collectivités sur le climat, la biodiversité, l'eau et la transition énergétique.",
+    themes: ["Environnement", "Climat", "Coopération"],
+    funder: "MEAE — DCTIV",
+    eligibleEntities: ["collectivite", "association", "ong"],
+    maxAmountEur: 300000,
+  },
 
   // ─── MINISTÈRE DE L'INTÉRIEUR / JUSTICE ─────────────────────────
   {

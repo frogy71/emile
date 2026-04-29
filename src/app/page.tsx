@@ -1,14 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  QuickStartForm,
   PENDING_PROJECT_STORAGE_KEY,
   type QuickStartFormData,
 } from "@/components/quick-start-form";
+import { TypeformQuickStart } from "@/components/typeform-quick-start";
 import {
   ArrowRight,
   Sparkles,
@@ -27,110 +28,61 @@ import {
   Factory,
 } from "lucide-react";
 
-type CellIcon = "check" | "cross" | null;
-type ComparisonCell = { icon: CellIcon; text: string };
-type ComparisonRow = {
-  label: string;
-  emile: ComparisonCell;
-  aidesTerritoires: ComparisonCell;
-  welcomeEurope: ComparisonCell;
-  subventionsFr: ComparisonCell;
+type Provider = {
+  key: "emile" | "aidesTerritoires" | "welcomeEurope" | "subventionsFr";
+  name: string;
+  tagline: string;
+  highlight?: boolean;
+  badge?: string;
+  price: string;
 };
 
-const COMPARISON_ROWS: ComparisonRow[] = [
+type Feature = { label: string };
+
+const PROVIDERS: Provider[] = [
   {
-    label: "Subventions indexées",
-    emile: { icon: null, text: "6 279 FR + UE + Fondations" },
-    aidesTerritoires: { icon: null, text: "~4 000 (publiques FR)" },
-    welcomeEurope: { icon: null, text: "UE uniquement" },
-    subventionsFr: { icon: null, text: "~2 000" },
+    key: "emile",
+    name: "Emile",
+    tagline: "Le copilote complet",
+    highlight: true,
+    badge: "Recommandé",
+    price: "À partir de 0€",
   },
   {
-    label: "Matching IA personnalisé",
-    emile: { icon: "check", text: "Embeddings sémantiques + feedback" },
-    aidesTerritoires: { icon: "cross", text: "Filtres manuels" },
-    welcomeEurope: { icon: "cross", text: "Filtres manuels" },
-    subventionsFr: { icon: "cross", text: "Filtres manuels" },
+    key: "aidesTerritoires",
+    name: "Aides-Territoires",
+    tagline: "Annuaire public FR",
+    price: "Gratuit",
   },
   {
-    label: "Pipeline visuel (Kanban)",
-    emile: { icon: "check", text: "Suivi de candidatures complet" },
-    aidesTerritoires: { icon: "cross", text: "—" },
-    welcomeEurope: { icon: "cross", text: "—" },
-    subventionsFr: { icon: "cross", text: "—" },
+    key: "welcomeEurope",
+    name: "WelcomeEurope",
+    tagline: "Focus UE",
+    price: "150–300 €/mois",
   },
   {
-    label: "Génération de dossiers IA",
-    emile: { icon: "check", text: "Brouillon complet auto-généré" },
-    aidesTerritoires: { icon: "cross", text: "—" },
-    welcomeEurope: { icon: "cross", text: "—" },
-    subventionsFr: { icon: "cross", text: "—" },
-  },
-  {
-    label: "Fondations privées",
-    emile: { icon: "check", text: "200+ portails crawlés" },
-    aidesTerritoires: { icon: "cross", text: "—" },
-    welcomeEurope: { icon: "cross", text: "—" },
-    subventionsFr: { icon: "cross", text: "—" },
-  },
-  {
-    label: "Sources européennes",
-    emile: { icon: "check", text: "SEDIA + Erasmus+ + Interreg + EEA" },
-    aidesTerritoires: { icon: "cross", text: "—" },
-    welcomeEurope: { icon: "check", text: "Couverture UE" },
-    subventionsFr: { icon: "cross", text: "Limité" },
-  },
-  {
-    label: "Apprentissage continu",
-    emile: { icon: "check", text: "S'améliore à chaque interaction" },
-    aidesTerritoires: { icon: "cross", text: "—" },
-    welcomeEurope: { icon: "cross", text: "—" },
-    subventionsFr: { icon: "cross", text: "—" },
-  },
-  {
-    label: "Prix",
-    emile: { icon: null, text: "À partir de 0€" },
-    aidesTerritoires: { icon: null, text: "Gratuit" },
-    welcomeEurope: { icon: null, text: "150–300 €/mois" },
-    subventionsFr: { icon: null, text: "Gratuit (limité)" },
+    key: "subventionsFr",
+    name: "Subventions.fr",
+    tagline: "Annuaire limité",
+    price: "Gratuit (limité)",
   },
 ];
 
-function ComparisonCellContent({
-  cell,
-  highlight = false,
-}: {
-  cell: ComparisonCell;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-2">
-      {cell.icon === "check" && (
-        <span
-          className={`flex h-7 w-7 items-center justify-center rounded-md border-2 border-border ${
-            highlight ? "bg-card" : "bg-[#c8f76f]"
-          }`}
-        >
-          <Check className="h-4 w-4" strokeWidth={3} />
-        </span>
-      )}
-      {cell.icon === "cross" && (
-        <span className="flex h-7 w-7 items-center justify-center rounded-md border-2 border-border bg-card">
-          <X className="h-4 w-4 text-rose-500" strokeWidth={3} />
-        </span>
-      )}
-      <span
-        className={`text-xs leading-snug ${
-          cell.icon === "cross"
-            ? "font-medium text-muted-foreground"
-            : "font-semibold"
-        }`}
-      >
-        {cell.text}
-      </span>
-    </div>
-  );
-}
+const FEATURES: Feature[] = [
+  { label: "Couverture FR + UE + Fondations" },
+  { label: "Matching IA sémantique" },
+  { label: "Pipeline Kanban intégré" },
+  { label: "Génération de dossiers IA" },
+  { label: "Fondations privées" },
+  { label: "Mises à jour quotidiennes" },
+];
+
+const PROVIDER_FEATURES: Record<Provider["key"], boolean[]> = {
+  emile: [true, true, true, true, true, true],
+  aidesTerritoires: [false, false, false, false, false, true],
+  welcomeEurope: [false, false, false, false, false, false],
+  subventionsFr: [false, false, false, false, false, false],
+};
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://grant-finder-kappa.vercel.app";
@@ -267,8 +219,48 @@ const TESTIMONIALS = [
   },
 ];
 
+function formatGrantCount(n: number): string {
+  // 6 279 → "6 279" (French thousand separator: NBSP)
+  return new Intl.NumberFormat("fr-FR").format(n).replace(/\s/g, " ");
+}
+
+function formatBillions(totalEur: number): string {
+  // Round to one decimal billion, e.g. 4_900_000_000 → "4,9".
+  if (!totalEur) return "5";
+  const billions = totalEur / 1_000_000_000;
+  if (billions < 1) {
+    // Sub-billion: show in M€ format would change the copy, so keep a
+    // floor of "1" rather than confusing the user with "0,3".
+    return "1";
+  }
+  return billions.toFixed(1).replace(".", ",");
+}
+
+type GrantsStats = { count: number; totalAmount: number };
+
 export default function LandingPage() {
   const router = useRouter();
+  const [stats, setStats] = useState<GrantsStats | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/stats/grants-count", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data && typeof data.count === "number") {
+          setStats({ count: data.count, totalAmount: data.totalAmount ?? 0 });
+        }
+      })
+      .catch(() => {
+        // Network failure → leave stats null and render the fallback copy.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const heroCount = stats ? formatGrantCount(stats.count) : "6 000+";
+  const heroBillions = stats ? formatBillions(stats.totalAmount) : "5";
 
   const handleSubmit = async (data: QuickStartFormData) => {
     try {
@@ -331,12 +323,12 @@ export default function LandingPage() {
         </Badge>
         <h1 className="text-5xl font-black leading-[1.05] tracking-tight text-foreground md:text-7xl">
           <span className="bg-[#c8f76f] px-3 rounded-2xl border-2 border-border shadow-[4px_4px_0px_0px_#1a1a1a]">
-            6 000+
+            {heroCount}
           </span>{" "}
           subventions vous attendent.
         </h1>
         <p className="mt-6 text-lg font-bold text-foreground md:text-xl">
-          Près de 5 Md€ de financements disponibles.
+          Près de {heroBillions} Md€ de financements disponibles.
         </p>
         <p className="mt-2 text-base font-medium text-muted-foreground md:text-lg">
           33 sources · France · Europe · Fondations privées · Mises à jour
@@ -450,9 +442,10 @@ export default function LandingPage() {
           <h2 className="text-4xl font-black text-foreground md:text-5xl">
             Emile combine ce que personne d&apos;autre ne fait.
           </h2>
-          <p className="mt-4 max-w-2xl text-lg text-muted-foreground font-medium md:text-xl">
-            Le plus grand répertoire, le matching le plus précis, la gestion
-            visuelle, et la génération de dossiers — en un seul outil.
+          <p className="mt-4 max-w-3xl text-lg text-muted-foreground font-medium md:text-xl">
+            Le plus grand répertoire français de subventions. Le matching IA le
+            plus puissant (on l&apos;a volé à Tinder… Chut). La gestion visuelle
+            de toutes vos subventions. Et la génération de dossier en un clic.
           </p>
 
           <div className="mt-12 grid gap-5 md:grid-cols-2">
@@ -476,7 +469,7 @@ export default function LandingPage() {
             ))}
           </div>
 
-          {/* Comparison table — hammers the differentiation */}
+          {/* Card-based comparison — feels like an app store, not a spreadsheet */}
           <div className="mt-16">
             <h3 className="text-2xl font-black text-foreground md:text-3xl">
               Emile vs les alternatives
@@ -485,88 +478,101 @@ export default function LandingPage() {
               Comparez. Choisissez. Décrochez.
             </p>
 
-            <div className="mt-8 overflow-x-auto rounded-2xl border-2 border-border bg-card shadow-[4px_4px_0px_0px_#1a1a1a]">
-              <table className="w-full min-w-[820px] border-collapse">
-                <colgroup>
-                  <col className="w-[22%]" />
-                  <col className="w-[28%]" />
-                  <col className="w-[16.66%]" />
-                  <col className="w-[16.66%]" />
-                  <col className="w-[16.66%]" />
-                </colgroup>
-                <thead>
-                  <tr className="border-b-2 border-border">
-                    <th className="p-5 text-left text-xs font-black uppercase tracking-wide align-bottom">
-                      Critère
-                    </th>
-                    <th className="relative p-5 text-center align-bottom bg-[#c8f76f] border-x-2 border-border">
+            <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+              {PROVIDERS.map((p) => {
+                const flags = PROVIDER_FEATURES[p.key];
+                return (
+                  <div
+                    key={p.key}
+                    className={`relative rounded-2xl border-2 bg-card p-6 shadow-[4px_4px_0px_0px_#1a1a1a] ${
+                      p.highlight
+                        ? "border-[#7bc618] ring-4 ring-[#c8f76f]"
+                        : "border-border"
+                    }`}
+                  >
+                    {p.badge && (
                       <Badge
                         variant="default"
                         className="absolute -top-3 left-1/2 -translate-x-1/2 bg-foreground text-background px-3 py-1 text-[10px] font-black"
                       >
-                        Recommandé
+                        {p.badge}
                       </Badge>
-                      <span className="inline-flex items-baseline text-xl font-black tracking-tight">
-                        Emile
-                        <span className="ml-1 rounded-md bg-foreground px-1.5 py-0 text-base text-[#c8f76f]">
+                    )}
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl font-black tracking-tight text-foreground">
+                        {p.name}
+                      </span>
+                      {p.key === "emile" && (
+                        <span className="rounded-md bg-foreground px-1.5 text-base text-[#c8f76f]">
                           .
                         </span>
-                      </span>
-                    </th>
-                    <th className="p-5 text-center text-sm font-black align-bottom">
-                      Aides-Territoires
-                    </th>
-                    <th className="p-5 text-center text-sm font-black align-bottom">
-                      WelcomeEurope
-                    </th>
-                    <th className="p-5 text-center text-sm font-black align-bottom">
-                      Subventions.fr
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {COMPARISON_ROWS.map((row, idx) => {
-                    const isLast = idx === COMPARISON_ROWS.length - 1;
-                    return (
-                      <tr
-                        key={row.label}
-                        className={isLast ? "" : "border-b-2 border-border"}
-                      >
-                        <td className="p-5 text-sm font-bold align-top">
-                          {row.label}
-                        </td>
-                        <td className="p-5 align-top text-center bg-[#c8f76f] border-x-2 border-border">
-                          <ComparisonCellContent cell={row.emile} highlight />
-                        </td>
-                        <td className="p-5 align-top text-center">
-                          <ComparisonCellContent cell={row.aidesTerritoires} />
-                        </td>
-                        <td className="p-5 align-top text-center">
-                          <ComparisonCellContent cell={row.welcomeEurope} />
-                        </td>
-                        <td className="p-5 align-top text-center">
-                          <ComparisonCellContent cell={row.subventionsFr} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                      {p.tagline}
+                    </p>
 
-            <p className="mt-4 text-xs text-muted-foreground font-medium md:hidden">
-              Faites glisser horizontalement pour comparer →
-            </p>
+                    <ul className="mt-5 space-y-3">
+                      {FEATURES.map((f, i) => {
+                        const ok = flags[i];
+                        return (
+                          <li
+                            key={f.label}
+                            className="flex items-start gap-2.5"
+                          >
+                            <span
+                              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 border-border ${
+                                ok ? "bg-[#c8f76f]" : "bg-card"
+                              }`}
+                            >
+                              {ok ? (
+                                <Check
+                                  className="h-3 w-3 text-foreground"
+                                  strokeWidth={3.5}
+                                />
+                              ) : (
+                                <X
+                                  className="h-3 w-3 text-rose-500"
+                                  strokeWidth={3.5}
+                                />
+                              )}
+                            </span>
+                            <span
+                              className={`text-sm leading-tight ${
+                                ok
+                                  ? "font-bold text-foreground"
+                                  : "font-medium text-muted-foreground"
+                              }`}
+                            >
+                              {f.label}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+
+                    <div className="mt-6 border-t-2 border-border pt-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Prix
+                      </p>
+                      <p className="mt-1 text-base font-black text-foreground">
+                        {p.price}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 4. ESSAYER — the form */}
+      {/* 4. ESSAYER — Typeform-style step-by-step */}
       <section
         id="essayer"
         className="border-t-2 border-border bg-[#fefae0] py-16 md:py-20"
       >
-        <div className="mx-auto max-w-3xl px-6">
+        <div className="mx-auto max-w-2xl px-6">
           <div className="mb-10 text-center">
             <Badge
               variant="default"
@@ -578,16 +584,14 @@ export default function LandingPage() {
               Décrivez votre projet.
             </h2>
             <p className="mt-4 text-lg font-medium text-muted-foreground md:text-xl">
-              Six champs. Quelques phrases. Notre IA croise votre description
-              avec 6 279 subventions FR &amp; UE.
+              Six questions. Quelques minutes. Notre IA croise vos réponses avec
+              {" "}
+              {stats ? formatGrantCount(stats.count) : "6 000+"} subventions FR
+              &amp; UE.
             </p>
           </div>
 
-          <QuickStartForm
-            ctaLabel="Trouver mes subventions"
-            loadingLabel="Préparation..."
-            onSubmit={handleSubmit}
-          />
+          <TypeformQuickStart onSubmit={handleSubmit} />
 
           <p className="mt-6 text-center text-xs font-medium text-muted-foreground">
             Aucune carte bancaire. Vos données restent privées.

@@ -48,7 +48,7 @@ export async function updateSession(request: NextRequest) {
   // so the form is the very first thing prospects see.
   const publicRoutes = ["/", "/login", "/signup", "/pricing", "/try", "/essai", "/auth/callback"];
   // Public API routes (webhooks, cron jobs, ingestion)
-  const publicApiRoutes = ["/api/stripe/webhook", "/api/alerts", "/api/alerts/send", "/api/ingest", "/api/cron"];
+  const publicApiRoutes = ["/api/stripe/webhook", "/api/alerts", "/api/alerts/send", "/api/ingest", "/api/cron", "/api/stats"];
   const isPublicRoute = publicRoutes.some(
     (route) => request.nextUrl.pathname === route
   ) ||

@@ -145,7 +145,7 @@ const DIFFERENTIATORS = [
   {
     icon: Search,
     tagline: "Le plus grand répertoire français de subventions.",
-    body: "6 279 subventions, 33 sources publiques et privées — France, Europe, fondations. Personne d'autre n'a cette couverture.",
+    body: "6 279 subventions — France, Europe, fondations privées. Personne d'autre n'a cette couverture.",
     color: "bg-[#c8f76f]",
   },
   {
@@ -331,8 +331,7 @@ export default function LandingPage() {
           Près de {heroBillions} Md€ de financements disponibles.
         </p>
         <p className="mt-2 text-base font-medium text-muted-foreground md:text-lg">
-          33 sources · France · Europe · Fondations privées · Mises à jour
-          quotidiennes.
+          France · Europe · Fondations privées · Mises à jour quotidiennes.
         </p>
         <div className="mt-8">
           <Link href="#essayer">

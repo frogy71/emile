@@ -7,14 +7,18 @@ import {
   Building2,
   FileText,
   FolderOpen,
+  Image as ImageIcon,
   KanbanSquare,
   LayoutDashboard,
   LogOut,
+  Mail,
+  Megaphone,
   Menu,
   Plus,
   Search,
   Settings,
   Shield,
+  Users,
   X,
 } from "lucide-react";
 
@@ -186,11 +190,64 @@ export function AppShell({
         <div className="px-3 mt-2">
           <Link
             href="/admin"
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-secondary"
+            className={`flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-bold transition-colors ${
+              pathname === "/admin"
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:bg-secondary"
+            }`}
           >
             <Shield className="h-3.5 w-3.5" />
             Admin
           </Link>
+          {pathname.startsWith("/admin") && (
+            <div className="mt-1 ml-2 space-y-0.5 border-l-2 border-border pl-2">
+              <AdminSubLink
+                href="/admin"
+                icon={LayoutDashboard}
+                pathname={pathname}
+                exact
+              >
+                Dashboard
+              </AdminSubLink>
+              <AdminSubLink
+                href="/admin/email-sequences"
+                icon={Mail}
+                pathname={pathname}
+                exact
+              >
+                Séquence emails
+              </AdminSubLink>
+              <AdminSubLink
+                href="/admin/email-sequences/users"
+                icon={Users}
+                pathname={pathname}
+              >
+                Utilisateurs en séquence
+              </AdminSubLink>
+              <AdminSubLink
+                href="/admin/blog"
+                icon={FileText}
+                pathname={pathname}
+                exact
+              >
+                Blog
+              </AdminSubLink>
+              <AdminSubLink
+                href="/admin/blog/cta-template"
+                icon={Megaphone}
+                pathname={pathname}
+              >
+                CTA template
+              </AdminSubLink>
+              <AdminSubLink
+                href="/admin/carousels"
+                icon={ImageIcon}
+                pathname={pathname}
+              >
+                Carousels
+              </AdminSubLink>
+            </div>
+          )}
         </div>
 
         {/* Projects section */}
@@ -281,6 +338,36 @@ function NavLink({
       }`}
     >
       <Icon className="h-4 w-4" />
+      {children}
+    </Link>
+  );
+}
+
+function AdminSubLink({
+  href,
+  icon: Icon,
+  pathname,
+  exact = false,
+  children,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  pathname: string;
+  exact?: boolean;
+  children: React.ReactNode;
+}) {
+  const active = exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
+        active
+          ? "bg-[#a3d5ff] text-foreground"
+          : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5" />
       {children}
     </Link>
   );

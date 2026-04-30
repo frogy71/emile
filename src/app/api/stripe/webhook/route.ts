@@ -64,6 +64,69 @@ export async function POST(request: Request) {
       break;
     }
 
+    // Invoice lifecycle — Stripe creates an invoice for every subscription
+    // billing event. We mirror it locally so /settings/billing and
+    // /admin/invoices can render the history without going through the portal.
+    case "invoice.created":
+    case "invoice.finalized":
+    case "invoice.paid":
+    case "invoice.payment_failed":
+    case "invoice.payment_succeeded": {
+      const invoice = event.data.object as unknown as {
+        id: string;
+        number: string | null;
+        customer: string;
+        subscription: string | null;
+        amount_due: number;
+        amount_paid: number;
+        currency: string;
+        status: string | null;
+        hosted_invoice_url: string | null;
+        invoice_pdf: string | null;
+        status_transitions?: { paid_at?: number | null };
+        lines?: { data?: Array<{ price?: { metadata?: { plan?: string } } }> };
+      };
+
+      // Find the org by stripe_customer_id (set on checkout.session.completed).
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("stripe_customer_id", invoice.customer)
+        .maybeSingle();
+
+      if (!org) break; // unknown customer — ignore (test webhooks etc.)
+
+      const isPaid = invoice.status === "paid";
+      const paidAt = invoice.status_transitions?.paid_at
+        ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
+        : isPaid
+          ? new Date().toISOString()
+          : null;
+
+      const planFromLines =
+        invoice.lines?.data?.[0]?.price?.metadata?.plan || null;
+
+      await supabase
+        .from("invoices")
+        .upsert(
+          {
+            organization_id: org.id,
+            invoice_number: invoice.number || `STRIPE-${invoice.id}`,
+            amount_cents: invoice.amount_paid || invoice.amount_due,
+            currency: invoice.currency,
+            plan: planFromLines,
+            status: invoice.status || "pending",
+            stripe_invoice_id: invoice.id,
+            stripe_subscription_id: invoice.subscription,
+            hosted_invoice_url: invoice.hosted_invoice_url,
+            pdf_url: invoice.invoice_pdf,
+            paid_at: paidAt,
+          },
+          { onConflict: "stripe_invoice_id" }
+        );
+      break;
+    }
+
     case "customer.subscription.updated": {
       const subscription = event.data.object;
       const customerId = subscription.customer as string;

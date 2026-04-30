@@ -17,6 +17,7 @@ type GrantFilters = {
   status: string;
   limit: number;
   offset: number;
+  sort: "deadline" | "newest" | "amount";
 };
 
 /**
@@ -32,9 +33,18 @@ function buildQuery(
   let query = supabase
     .from("grants")
     .select("*", { count: "exact" })
-    .eq("status", f.status)
-    .order("deadline", { ascending: true, nullsFirst: false })
-    .range(f.offset, f.offset + f.limit - 1);
+    .eq("status", f.status);
+
+  if (f.sort === "newest") {
+    query = query.order("created_at", { ascending: false, nullsFirst: false });
+  } else if (f.sort === "amount") {
+    query = query.order("max_amount_eur", { ascending: false, nullsFirst: false });
+  } else {
+    // default: most-urgent deadline first
+    query = query.order("deadline", { ascending: true, nullsFirst: false });
+  }
+
+  query = query.range(f.offset, f.offset + f.limit - 1);
 
   if (f.country && !disabled.has("country")) {
     query = query.eq("country", f.country);
@@ -84,6 +94,76 @@ function buildQuery(
 }
 
 /**
+ * Compute the total funding pool (sum of max_amount_eur) across the whole
+ * filtered set, not just the current page. Used by the abundance banner on
+ * the grants page. Capped at 10k rows so a runaway filter doesn't blow up
+ * the response, but in practice the catalog is well under that.
+ */
+async function sumFilteredAmount(
+  supabase: SupabaseClient,
+  f: GrantFilters,
+  disabled: Set<string> = new Set()
+): Promise<number> {
+  let query = supabase
+    .from("grants")
+    .select("max_amount_eur")
+    .eq("status", f.status)
+    .not("max_amount_eur", "is", null)
+    .limit(10000);
+
+  if (f.country && !disabled.has("country")) {
+    query = query.eq("country", f.country);
+  }
+
+  if (!disabled.has("type")) {
+    if (f.type === "public") {
+      query = query.in("source_name", [
+        "Aides-Territoires",
+        "FDVA",
+        "Service Civique",
+        "Ministère de la Culture",
+        "Ministère Écologie",
+        "ANS — Agence nationale du sport",
+        "ADEME — Agir pour la transition",
+      ]);
+    } else if (f.type === "private" || f.type === "fondation") {
+      query = query.in("source_name", [
+        "data.gouv.fr — FRUP",
+        "data.gouv.fr — Fondations entreprises",
+        "Fondations françaises",
+        "Fondation de France",
+        "BPI France",
+      ]);
+    } else if (f.type === "eu") {
+      query = query.eq("source_name", "EU Funding & Tenders");
+    }
+  }
+
+  if (f.search && !disabled.has("search")) {
+    query = query.or(
+      `title.ilike.%${f.search}%,funder.ilike.%${f.search}%,summary.ilike.%${f.search}%`
+    );
+  }
+
+  if (f.territory && !disabled.has("territory")) {
+    query = query.or(
+      `summary.ilike.%${f.territory}%,raw_content.ilike.%${f.territory}%,title.ilike.%${f.territory}%,funder.ilike.%${f.territory}%`
+    );
+  }
+
+  if (f.theme && !disabled.has("theme")) {
+    query = query.contains("thematic_areas", [f.theme]);
+  }
+
+  const { data } = await query;
+  return (data || []).reduce(
+    (acc: number, row: { max_amount_eur: number | null }) =>
+      acc + (row.max_amount_eur || 0),
+    0
+  );
+}
+
+/**
  * Progressive filter relaxation — "never show zero grants" UX guarantee.
  *
  * When the user's strict query returns 0 matches, we don't leave them with
@@ -123,6 +203,10 @@ export async function GET(request: Request) {
   const supabase = getSupabase();
   const { searchParams } = new URL(request.url);
 
+  const sortParam = searchParams.get("sort");
+  const sort: GrantFilters["sort"] =
+    sortParam === "newest" || sortParam === "amount" ? sortParam : "deadline";
+
   const filters: GrantFilters = {
     country: searchParams.get("country"),
     search: searchParams.get("q"),
@@ -132,6 +216,7 @@ export async function GET(request: Request) {
     status: searchParams.get("status") || "active",
     limit: parseInt(searchParams.get("limit") || "50"),
     offset: parseInt(searchParams.get("offset") || "0"),
+    sort,
   };
 
   // Attempt 1: strict query with all requested filters.
@@ -147,9 +232,11 @@ export async function GET(request: Request) {
     filters.search || filters.type || filters.territory || filters.theme;
 
   if ((strictCount || 0) > 0 || !hasNarrowingFilters) {
+    const totalAmount = await sumFilteredAmount(supabase, filters);
     return NextResponse.json({
       grants: strictData || [],
       total: strictCount || 0,
+      totalAmount,
       limit: filters.limit,
       offset: filters.offset,
       filters: {
@@ -183,9 +270,12 @@ export async function GET(request: Request) {
     if (error) continue;
     if ((count || 0) === 0) continue;
 
+    const totalAmount = await sumFilteredAmount(supabase, filters, disabled);
+
     return NextResponse.json({
       grants: data || [],
       total: count || 0,
+      totalAmount,
       limit: filters.limit,
       offset: filters.offset,
       filters: {
@@ -206,6 +296,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     grants: [],
     total: 0,
+    totalAmount: 0,
     limit: filters.limit,
     offset: filters.offset,
     filters: {

@@ -135,8 +135,12 @@ function SlideNumber({ n, accent }: { n: number; accent: string }) {
 }
 
 // ── Slide 1 — HOOK ──────────────────────────────────────────────────────────
+// Landing-page-style hero: grant TITLE is the headline. Amount + deadline
+// are the supporting metadata. Mirrors how the Émile homepage opens with a
+// big bold promise and the meta lives underneath.
 export function Slide1Hook({ grant, accent }: SlideContext) {
   const days = daysUntil(grant.deadline);
+  const amountTease = formatAmountTeaser(grant.max_amount_eur);
   return (
     <div style={baseSlide(accent)}>
       <SlideNumber n={1} accent={accent} />
@@ -147,82 +151,114 @@ export function Slide1Hook({ grant, accent }: SlideContext) {
           flexDirection: "column",
           flex: 1,
           justifyContent: "center",
-          gap: 32,
+          gap: 36,
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            fontSize: 28,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-          }}
-        >
-          ⚡ Subvention du jour
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            fontSize: 140,
-            fontWeight: 900,
-            lineHeight: 1,
-            letterSpacing: "-0.04em",
-          }}
-        >
-          {formatAmountTeaser(grant.max_amount_eur)}
-        </div>
-
-        <div style={{ ...card, gap: 16 }}>
-          <div
-            style={{
-              display: "flex",
-              fontSize: 36,
-              fontWeight: 800,
-              lineHeight: 1.15,
-              color: FOREGROUND,
-            }}
-          >
-            {truncate(grant.title, 110)}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              fontSize: 22,
-              color: MUTED,
-              fontWeight: 600,
-              marginTop: 8,
-            }}
-          >
-            {shortFunder(grant.funder)}
-          </div>
-        </div>
-
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: 16,
             fontSize: 26,
-            fontWeight: 700,
+            fontWeight: 800,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
           }}
         >
-          <span>📅 Deadline : {formatDeadline(grant.deadline)}</span>
-          {typeof days === "number" && days > 0 && (
-            <span
-              style={{
-                display: "flex",
-                backgroundColor: FOREGROUND,
-                color: accent,
-                padding: "8px 18px",
-                borderRadius: 999,
-                fontSize: 22,
-              }}
-            >
-              J-{days}
-            </span>
-          )}
+          <span
+            style={{
+              display: "flex",
+              backgroundColor: FOREGROUND,
+              color: accent,
+              padding: "10px 20px",
+              borderRadius: 999,
+            }}
+          >
+            ⚡ Subvention du jour
+          </span>
+        </div>
+
+        {/* Hero title — big, bold, dominant. Auto-shrinks on long titles. */}
+        <div
+          style={{
+            display: "flex",
+            fontSize: grant.title.length > 80 ? 76 : grant.title.length > 50 ? 96 : 116,
+            fontWeight: 900,
+            lineHeight: 1.02,
+            letterSpacing: "-0.04em",
+            color: FOREGROUND,
+          }}
+        >
+          {truncate(grant.title, 140)}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            fontSize: 28,
+            color: FOREGROUND,
+            fontWeight: 700,
+            opacity: 0.85,
+          }}
+        >
+          {shortFunder(grant.funder)}
+        </div>
+
+        {/* Meta band: amount + deadline — same row, equal weight. */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 16,
+            marginTop: 8,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              backgroundColor: CARD,
+              border: `4px solid ${FOREGROUND}`,
+              borderRadius: 20,
+              boxShadow: SHADOW,
+              padding: "20px 28px",
+              fontSize: 40,
+              fontWeight: 900,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            💰 {amountTease}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              backgroundColor: CARD,
+              border: `4px solid ${FOREGROUND}`,
+              borderRadius: 20,
+              boxShadow: SHADOW,
+              padding: "20px 28px",
+              fontSize: 28,
+              fontWeight: 800,
+            }}
+          >
+            <span>📅 {formatDeadline(grant.deadline)}</span>
+            {typeof days === "number" && days > 0 && (
+              <span
+                style={{
+                  display: "flex",
+                  backgroundColor: FOREGROUND,
+                  color: accent,
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  fontSize: 22,
+                }}
+              >
+                J-{days}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

@@ -94,6 +94,13 @@ function formatEur(n: number | null | undefined): string | null {
   return `${n} €`;
 }
 
+function formatTotalEur(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1).replace(".0", "")}Md€`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(".0", "")}M€`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k€`;
+  return `${n}€`;
+}
+
 /**
  * Private foundations respond to direct outreach much more than public calls
  * — their programs are discretionary, the decision is human, and a well-told
@@ -310,7 +317,7 @@ function PodiumCard({
   );
 }
 
-// ─── Top-7 tier card (medium emphasis) ───────────────────────────
+// ─── Top-tier card (medium emphasis, sized for 3-col grid) ───────
 
 function TopCard({
   match,
@@ -334,165 +341,122 @@ function TopCard({
 
   return (
     <div
-      className={`rounded-2xl border-2 border-border shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px] ${
+      className={`flex h-full flex-col rounded-2xl border-2 border-border shadow-[4px_4px_0px_0px_#1a1a1a] transition-all hover:shadow-[6px_6px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px] ${
         isExceptional ? "bg-[#fff8e1]" : "bg-card"
       }`}
     >
-      <div className="p-5">
-        <div className="flex items-start gap-4">
-          <div className="shrink-0 text-center">
-            <div className="text-[11px] font-black text-muted-foreground">
-              #{rank}
-            </div>
-            <div
-              className={`mt-1 flex h-12 w-12 items-center justify-center rounded-xl border-2 border-border text-lg font-black shadow-[2px_2px_0px_0px_#1a1a1a] ${
-                isExceptional ? "bg-[#ffe066]" : "bg-[#c8f76f]"
-              }`}
-            >
-              {match.score}
-            </div>
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              {grant.source_name && (
-                <Badge variant="secondary" className="text-[10px]">
-                  {grant.source_name}
-                </Badge>
-              )}
-              {difficulty && (
-                <Badge
-                  variant="secondary"
-                  className={`text-[10px] ${difficulty.color}`}
-                >
-                  {difficulty.label}
-                </Badge>
-              )}
-              <PopularityBadge count={grant.popularity_score} />
-            </div>
-            <h3 className="text-base font-black leading-tight">{grant.title}</h3>
-            {grant.funder && (
-              <p className="text-xs font-bold text-muted-foreground">
-                {grant.funder}
-              </p>
-            )}
-            {(expl.summary || grant.summary) && (
-              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                {expl.summary || grant.summary}
-              </p>
-            )}
-            <div className="flex flex-wrap items-center gap-3 mt-3 text-xs font-bold text-muted-foreground">
-              {grant.deadline && (
-                <span className="inline-flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  {new Date(grant.deadline).toLocaleDateString("fr-FR")}
-                  {days !== null && days >= 0 && days < 30 && (
-                    <span className="ml-0.5 text-orange-600">(J-{days})</span>
-                  )}
-                </span>
-              )}
-              {amount && (
-                <span className="inline-flex items-center gap-1">
-                  <Euro className="h-3 w-3" />
-                  Jusqu&apos;à {amount}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="shrink-0 flex flex-col gap-2">
-            <Link href={`/grants/${grant.id}?project_id=${projectId}`}>
-              <Button variant="accent" size="sm">
-                <Sparkles className="h-4 w-4" />
-                Proposition
-              </Button>
-            </Link>
-            <Link href={`/grants/${grant.id}?project_id=${projectId}`}>
-              <Button variant="outline" size="sm" className="w-full">
-                En savoir plus
-              </Button>
-            </Link>
-            {/* Contact button always shown for private foundations. */}
-            {isFoundation && grant.source_url && (
-              <a
-                href={grant.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="default" size="sm" className="w-full">
-                  <Phone className="h-3.5 w-3.5" />
-                  Contacter
-                </Button>
-              </a>
-            )}
-            <GrantInteractions
-              grantId={grant.id}
-              projectId={projectId}
-              layout="card"
-              className="justify-center"
-              tier={tier}
-            />
+      <div className="flex flex-1 flex-col p-4">
+        {/* Rank + score */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-black text-muted-foreground">
+            #{rank}
+          </span>
+          <div
+            className={`flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border text-base font-black shadow-[2px_2px_0px_0px_#1a1a1a] ${
+              isExceptional ? "bg-[#ffe066]" : "bg-[#c8f76f]"
+            }`}
+          >
+            {match.score}
           </div>
         </div>
+
+        {/* Badges */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          {grant.source_name && (
+            <Badge variant="secondary" className="text-[10px]">
+              {grant.source_name}
+            </Badge>
+          )}
+          {difficulty && (
+            <Badge
+              variant="secondary"
+              className={`text-[10px] ${difficulty.color}`}
+            >
+              {difficulty.label}
+            </Badge>
+          )}
+          <PopularityBadge count={grant.popularity_score} />
+        </div>
+
+        {/* Title + funder */}
+        <h3 className="text-sm font-black leading-tight line-clamp-2">
+          {grant.title}
+        </h3>
+        {grant.funder && (
+          <p className="text-xs font-bold text-muted-foreground line-clamp-1 mt-0.5">
+            {grant.funder}
+          </p>
+        )}
+
+        {(expl.summary || grant.summary) && (
+          <p className="text-xs text-muted-foreground mt-2 line-clamp-3">
+            {expl.summary || grant.summary}
+          </p>
+        )}
+
+        {/* Meta */}
+        <div className="flex flex-wrap items-center gap-2 mt-3 text-[11px] font-bold text-muted-foreground">
+          {grant.deadline && (
+            <span className="inline-flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {new Date(grant.deadline).toLocaleDateString("fr-FR")}
+              {days !== null && days >= 0 && days < 30 && (
+                <span className="ml-0.5 text-orange-600">(J-{days})</span>
+              )}
+            </span>
+          )}
+          {amount && (
+            <span className="inline-flex items-center gap-1">
+              <Euro className="h-3 w-3" />
+              {amount}
+            </span>
+          )}
+        </div>
+
         {isExceptional && (
-          <div className="mt-3 flex items-start gap-2 rounded-xl border-2 border-border bg-background p-2">
-            <Star className="h-4 w-4 shrink-0 mt-0.5 fill-[#ffe066] text-foreground" />
-            <p className="text-xs font-bold leading-snug">
-              Match exceptionnel —{" "}
-              {isFoundation
-                ? "contacte la fondation en direct."
-                : "dossier à prioriser."}
+          <div className="mt-3 flex items-start gap-1.5 rounded-lg border-2 border-border bg-background p-1.5">
+            <Star className="h-3 w-3 shrink-0 mt-0.5 fill-[#ffe066] text-foreground" />
+            <p className="text-[10px] font-bold leading-snug">
+              {isFoundation ? "Contacte en direct." : "À prioriser."}
             </p>
           </div>
         )}
+
+        {/* Actions */}
+        <div className="mt-auto pt-3 flex flex-col gap-1.5">
+          <Link href={`/grants/${grant.id}?project_id=${projectId}`}>
+            <Button variant="accent" size="sm" className="w-full">
+              <Sparkles className="h-3.5 w-3.5" />
+              Proposition
+            </Button>
+          </Link>
+          <Link href={`/grants/${grant.id}?project_id=${projectId}`}>
+            <Button variant="outline" size="sm" className="w-full">
+              En savoir plus
+            </Button>
+          </Link>
+          {isFoundation && grant.source_url && (
+            <a
+              href={grant.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="default" size="sm" className="w-full">
+                <Phone className="h-3.5 w-3.5" />
+                Contacter
+              </Button>
+            </a>
+          )}
+          <GrantInteractions
+            grantId={grant.id}
+            projectId={projectId}
+            layout="card"
+            className="justify-center"
+            tier={tier}
+          />
+        </div>
       </div>
     </div>
-  );
-}
-
-// ─── Rest tier (compact row) ─────────────────────────────────────
-
-function CompactRow({
-  match,
-  rank,
-  projectId,
-}: {
-  match: Match;
-  rank: number;
-  projectId: string;
-}) {
-  const grant = match.grants;
-  if (!grant) return null;
-  const amount = formatEur(grant.max_amount_eur);
-
-  return (
-    <Link
-      href={`/grants/${grant.id}?project_id=${projectId}`}
-      className="block rounded-xl border-2 border-border bg-card p-3 hover:shadow-[3px_3px_0px_0px_#1a1a1a] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all"
-    >
-      <div className="flex items-center gap-3">
-        <div className="text-xs font-black text-muted-foreground w-8 shrink-0">
-          #{rank}
-        </div>
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg border-2 border-border bg-secondary text-sm font-black shrink-0">
-          {match.score}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-black truncate">{grant.title}</p>
-          <p className="text-xs font-semibold text-muted-foreground truncate">
-            {grant.funder || ""}
-          </p>
-        </div>
-        <div className="text-xs font-bold text-muted-foreground whitespace-nowrap">
-          {grant.deadline &&
-            new Date(grant.deadline).toLocaleDateString("fr-FR", {
-              day: "numeric",
-              month: "short",
-            })}
-          {amount && <span className="ml-2">{amount}</span>}
-        </div>
-      </div>
-    </Link>
   );
 }
 
@@ -537,8 +501,27 @@ export function ProjectMatches({
     );
   }
 
+  // Total funding pool across visible matches — the "abundance" signal.
+  const totalEur = ranked.reduce(
+    (acc, m) => acc + (m.grants?.max_amount_eur || 0),
+    0
+  );
+
   return (
     <div className="space-y-8">
+      {/* Abundance banner — shows the firepower of the catalog up front. */}
+      <div className="rounded-2xl border-2 border-border bg-[#c8f76f] p-4 shadow-[4px_4px_0px_0px_#1a1a1a]">
+        <p className="text-sm font-black sm:text-base">
+          {ranked.length} subvention{ranked.length > 1 ? "s" : ""} trouvée
+          {ranked.length > 1 ? "s" : ""}
+          {totalEur > 0 && (
+            <>
+              <span className="mx-2">·</span>
+              {formatTotalEur(totalEur)} de financements disponibles
+            </>
+          )}
+        </p>
+      </div>
       {/* Exceptional-foundations banner — hidden for free users since the
           underlying matches are paywalled in the podium. */}
       {!isFree && exceptionalFoundations.length > 0 && (
@@ -672,7 +655,7 @@ export function ProjectMatches({
               </Badge>
             )}
           </div>
-          <div className="grid gap-3">
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
             {topTier.map((match, i) => (
               <div
                 key={match.id}
@@ -701,13 +684,14 @@ export function ProjectMatches({
               cta="Voir plus avec Pro"
               blurClass="blur-md"
             >
-              <div className="space-y-2">
-                {rest.slice(0, 5).map((match, i) => (
-                  <CompactRow
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
+                {rest.slice(0, 6).map((match, i) => (
+                  <TopCard
                     key={match.id}
                     match={match}
                     rank={i + restStart + 1}
                     projectId={projectId}
+                    tier={tier}
                   />
                 ))}
               </div>
@@ -730,13 +714,14 @@ export function ProjectMatches({
               )}
             </button>
             {showRest && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 grid gap-4 grid-cols-1 md:grid-cols-3">
                 {rest.map((match, i) => (
-                  <CompactRow
+                  <TopCard
                     key={match.id}
                     match={match}
                     rank={i + restStart + 1}
                     projectId={projectId}
+                    tier={tier}
                   />
                 ))}
               </div>

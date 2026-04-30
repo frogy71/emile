@@ -15,6 +15,7 @@ import {
   Loader2,
   Sparkles,
   ArrowDown,
+  ArrowDownUp,
 } from "lucide-react";
 import { SkeletonGrantCard } from "@/components/ui/skeleton";
 
@@ -76,6 +77,21 @@ function daysUntil(dateStr: string) {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+function formatTotalEur(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1).replace(".0", "")}Md€`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(".0", "")}M€`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k€`;
+  return `${n}€`;
+}
+
+const SORT_OPTIONS = [
+  { value: "deadline", label: "Par deadline (plus urgent)" },
+  { value: "newest", label: "Par date (plus récent)" },
+  { value: "amount", label: "Par montant (plus élevé)" },
+] as const;
+
+type SortValue = (typeof SORT_OPTIONS)[number]["value"];
+
 function getTypeBadge(source: string) {
   if (
     source?.includes("FRUP") ||
@@ -93,12 +109,14 @@ function getTypeBadge(source: string) {
 export default function GrantsPage() {
   const [grants, setGrants] = useState<Grant[]>([]);
   const [total, setTotal] = useState(0);
+  const [totalAmount, setTotalAmount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
   const [theme, setTheme] = useState("");
   const [territory, setTerritory] = useState("");
+  const [sort, setSort] = useState<SortValue>("deadline");
   const [page, setPage] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [relaxed, setRelaxed] = useState(false);
@@ -118,6 +136,7 @@ export default function GrantsPage() {
     if (type) params.set("type", type);
     if (theme) params.set("theme", theme);
     if (territory) params.set("territory", territory);
+    if (sort) params.set("sort", sort);
     params.set("limit", String(limit));
     params.set("offset", "0");
 
@@ -126,19 +145,21 @@ export default function GrantsPage() {
       const data = await res.json();
       setGrants(data.grants || []);
       setTotal(data.total || 0);
+      setTotalAmount(typeof data.totalAmount === "number" ? data.totalAmount : 0);
       setRelaxed(Boolean(data.relaxed));
       setRelaxedLabel(data.relaxedLabel || null);
       setRelaxedFilters(Array.isArray(data.relaxedFilters) ? data.relaxedFilters : []);
     } catch {
       setGrants([]);
       setTotal(0);
+      setTotalAmount(0);
       setRelaxed(false);
       setRelaxedLabel(null);
       setRelaxedFilters([]);
     } finally {
       setLoading(false);
     }
-  }, [search, type, theme, territory]);
+  }, [search, type, theme, territory, sort]);
 
   // Append-next-page: used by both the "Charger plus" button and the
   // intersection observer on the sentinel. Guarded against double-fire and
@@ -154,6 +175,7 @@ export default function GrantsPage() {
     if (type) params.set("type", type);
     if (theme) params.set("theme", theme);
     if (territory) params.set("territory", territory);
+    if (sort) params.set("sort", sort);
     params.set("limit", String(limit));
     params.set("offset", String(nextPage * limit));
 
@@ -172,7 +194,7 @@ export default function GrantsPage() {
     } finally {
       setLoadingMore(false);
     }
-  }, [loading, loadingMore, grants.length, total, page, search, type, theme, territory]);
+  }, [loading, loadingMore, grants.length, total, page, search, type, theme, territory, sort]);
 
   useEffect(() => {
     fetchFirstPage();
@@ -223,9 +245,25 @@ export default function GrantsPage() {
         </div>
       </div>
 
-      {/* Search + Filter toggle */}
-      <div className="flex gap-3 mb-4">
-        <div className="relative flex-1">
+      {/* Abundance banner — total found + total funding pool */}
+      {!loading && total > 0 && (
+        <div className="mb-4 rounded-2xl border-2 border-border bg-[#c8f76f] p-4 shadow-[4px_4px_0px_0px_#1a1a1a]">
+          <p className="text-sm font-black sm:text-base">
+            {total.toLocaleString("fr-FR")} subvention{total > 1 ? "s" : ""}{" "}
+            trouvée{total > 1 ? "s" : ""}
+            {totalAmount > 0 && (
+              <>
+                <span className="mx-2">·</span>
+                {formatTotalEur(totalAmount)} de financements disponibles
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {/* Search + Filter toggle + Sort */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Rechercher par titre, bailleur, résumé..."
@@ -233,6 +271,21 @@ export default function GrantsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
           />
+        </div>
+        <div className="relative">
+          <ArrowDownUp className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortValue)}
+            className="h-11 rounded-xl border-2 border-border bg-background pl-9 pr-4 text-sm font-bold cursor-pointer"
+            aria-label="Trier les subventions"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
         <Button
           variant={showFilters ? "accent" : "outline"}

@@ -151,7 +151,7 @@ export default function CarouselMakerPage() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ count: 2 }),
+        body: JSON.stringify({ count: 1 }),
       });
       const data = await res.json();
       if (!res.ok) {

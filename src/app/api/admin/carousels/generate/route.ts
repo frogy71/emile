@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
   try {
     const carousels = await generateCarouselsInMemory(supabase, {
-      count: body.count ?? 2,
+      count: body.count ?? 1,
       markPublished: false,
     });
 

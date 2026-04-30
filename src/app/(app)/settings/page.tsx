@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Bell, CreditCard, Check, Sparkles, Loader2, FileText, ExternalLink, Crown } from "lucide-react";
+import Link from "next/link";
+import { Bell, CreditCard, Check, Sparkles, Loader2, FileText, ExternalLink, Crown, Receipt } from "lucide-react";
 
 export default function SettingsPage() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -260,7 +261,13 @@ export default function SettingsPage() {
               Consultez vos factures, mettez à jour votre moyen de paiement ou modifiez votre plan
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap gap-2">
+            <Link href="/settings/billing">
+              <Button variant="default">
+                <Receipt className="h-4 w-4" />
+                Mes factures
+              </Button>
+            </Link>
             <Button
               variant="outline"
               onClick={async () => {
@@ -288,10 +295,10 @@ export default function SettingsPage() {
               ) : (
                 <ExternalLink className="h-4 w-4" />
               )}
-              Gérer mon abonnement et mes factures
+              Portail Stripe
             </Button>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Accédez au portail Stripe pour télécharger vos factures PDF, modifier votre carte ou changer de plan.
+            <p className="basis-full text-xs text-muted-foreground">
+              Téléchargez vos factures PDF dans la page « Mes factures », ou ouvrez le portail Stripe pour modifier votre carte ou votre plan.
             </p>
           </CardContent>
         </Card>

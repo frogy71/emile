@@ -171,7 +171,7 @@ export async function generateCarouselsInMemory(
   supabase: SupabaseClient,
   options: GenerateOptions = {}
 ): Promise<InMemoryCarousel[]> {
-  const count = options.count ?? 2;
+  const count = options.count ?? 1;
   const grants = await pickCarouselGrants(supabase, count);
   if (grants.length === 0) return [];
 

@@ -13,7 +13,7 @@ import { generateAndPublishCarousels } from "@/lib/carousel/generator";
  * Also stamps the chosen grants with `carousel_published_at` so they don't
  * get re-picked tomorrow.
  *
- * Body: { count?: number } — defaults to 2.
+ * Body: { count?: number } — defaults to 1 ("Grant du Jour").
  */
 
 const ADMIN_EMAILS = ["francois@tresorier.co", "tresorier.francois@gmail.com"];
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
   try {
     const published = await generateAndPublishCarousels(supabase, {
-      count: body.count ?? 2,
+      count: body.count ?? 1,
       markPublished: true,
     });
 

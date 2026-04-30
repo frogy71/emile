@@ -14,15 +14,58 @@ export interface CarouselGrant {
   max_amount_eur: number | null;
   deadline: string | null;
   eligibility_conditions: string | null;
+  country?: string | null;
+  eligible_countries?: string[] | null;
+  source_name?: string | null;
 }
 
 const SELECT_COLUMNS =
-  "id, title, summary, funder, thematic_areas, max_amount_eur, deadline, eligibility_conditions, carousel_published_at, status";
+  "id, title, summary, funder, thematic_areas, max_amount_eur, deadline, eligibility_conditions, country, eligible_countries, source_name, carousel_published_at, status";
 
 const PRIORITY_WINDOW_MIN_DAYS = 14;
 const PRIORITY_WINDOW_MAX_DAYS = 30;
 const FALLBACK_WINDOW_MAX_DAYS = 90;
-const PER_DAY = 2;
+const PER_DAY = 1;
+
+/**
+ * Source names known to publish France-relevant grants. Used as a final
+ * fallback for the FR-only filter when country/eligible_countries aren't
+ * populated on a given row.
+ */
+const FRENCH_SOURCE_NAMES = new Set<string>([
+  "Aides-Territoires",
+  "FDVA",
+  "Service Civique",
+  "Ministère de la Culture",
+  "Ministère Écologie",
+  "ANS — Agence nationale du sport",
+  "ADEME — Agir pour la transition",
+  "BPI France",
+  "data.gouv.fr — FRUP",
+  "data.gouv.fr — Fondations entreprises",
+  "Fondations françaises",
+  "Fondation de France",
+]);
+
+/**
+ * Strict France filter — the carousel feeds an Émile audience that's almost
+ * exclusively French NGOs, so showing an AAP from Malaysia or a non-eligible
+ * EU programme is worse than skipping the day. We accept a row when:
+ *   1. country is FR, or
+ *   2. eligible_countries contains FR / France, or
+ *   3. source is one of our known French ingestion sources.
+ */
+export function isFrenchGrant(g: CarouselGrant): boolean {
+  if (g.country && /^(FR|France)$/i.test(g.country)) return true;
+  if (
+    Array.isArray(g.eligible_countries) &&
+    g.eligible_countries.some((c) => /^(FR|France)$/i.test(c.trim()))
+  ) {
+    return true;
+  }
+  if (g.source_name && FRENCH_SOURCE_NAMES.has(g.source_name)) return true;
+  return false;
+}
 
 function daysFromNow(d: number): string {
   const x = new Date();
@@ -106,6 +149,10 @@ export async function pickCarouselGrants(
     // on a slow week
     pool = await tryFetch(7, FALLBACK_WINDOW_MAX_DAYS);
   }
+
+  // FR-only filter — never publish international grants. The audience is
+  // French NGOs; foreign AAPs erode trust and waste the slot.
+  pool = pool.filter(isFrenchGrant);
 
   // Rank highest score first
   pool.sort((a, b) => scoreGrant(b, now) - scoreGrant(a, now));

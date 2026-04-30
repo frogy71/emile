@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   try {
     const result = await generateAndSaveCarousels(supabase, {
       outputRoot: body.outputRoot,
-      count: body.count ?? 2,
+      count: body.count ?? 1,
       markPublished: true,
     });
 

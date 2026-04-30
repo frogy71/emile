@@ -619,26 +619,36 @@ export function ProjectMatches({
             >
               <div className="grid gap-4">
                 {podium.map((match, i) => (
-                  <PodiumCard
+                  <div
                     key={match.id}
-                    match={match}
-                    rank={(i + 1) as 1 | 2 | 3}
-                    projectId={projectId}
-                    tier={tier}
-                  />
+                    className="animate-card-rise-in"
+                    style={{ ["--stagger-index" as string]: i }}
+                  >
+                    <PodiumCard
+                      match={match}
+                      rank={(i + 1) as 1 | 2 | 3}
+                      projectId={projectId}
+                      tier={tier}
+                    />
+                  </div>
                 ))}
               </div>
             </PaywallOverlay>
           ) : (
             <div className="grid gap-4">
               {podium.map((match, i) => (
-                <PodiumCard
+                <div
                   key={match.id}
-                  match={match}
-                  rank={(i + 1) as 1 | 2 | 3}
-                  projectId={projectId}
-                  tier={tier}
-                />
+                  className="animate-card-rise-in"
+                  style={{ ["--stagger-index" as string]: i }}
+                >
+                  <PodiumCard
+                    match={match}
+                    rank={(i + 1) as 1 | 2 | 3}
+                    projectId={projectId}
+                    tier={tier}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -664,13 +674,18 @@ export function ProjectMatches({
           </div>
           <div className="grid gap-3">
             {topTier.map((match, i) => (
-              <TopCard
+              <div
                 key={match.id}
-                match={match}
-                rank={i + 4}
-                projectId={projectId}
-                tier={tier}
-              />
+                className="animate-card-rise-in"
+                style={{ ["--stagger-index" as string]: podium.length + i }}
+              >
+                <TopCard
+                  match={match}
+                  rank={i + 4}
+                  projectId={projectId}
+                  tier={tier}
+                />
+              </div>
             ))}
           </div>
         </div>

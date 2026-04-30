@@ -12,6 +12,10 @@ import {
 import { UpgradeModal } from "@/components/upgrade-modal";
 import { Confetti } from "@/components/ui/confetti";
 import { useToast } from "@/components/ui/toast";
+import {
+  MatchingOverlay,
+  type MatchingOverlayState,
+} from "@/components/matching-overlay";
 
 interface MatchButtonProps {
   projectId: string;
@@ -38,54 +42,109 @@ export function MatchButton({ projectId, autoStart = false }: MatchButtonProps) 
   const [confetti, setConfetti] = useState(false);
   const autoStartedRef = useRef(false);
 
-  const handleMatch = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/match`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (res.status === 402) {
-        setPaywallMessage(
-          data?.message ||
-            "Tu as utilisé tes 3 matchings gratuits ce mois-ci. Passe en Pro pour des matchings illimités."
-        );
-        return;
+  // Overlay state — only used when matching is auto-fired by the quick-start
+  // flow. Manual clicks rely on the inline button spinner.
+  const [overlayActive, setOverlayActive] = useState(false);
+  const [overlayFading, setOverlayFading] = useState(false);
+  const [overlayMode, setOverlayMode] = useState<"loading" | "error" | "empty">(
+    "loading"
+  );
+
+  // Transient celebration banner shown after the overlay fades out. Keyed by
+  // the moment matching completed so the slide-down animation re-runs.
+  const [banner, setBanner] = useState<{
+    key: number;
+    total: number;
+    highMatches: number;
+    goodMatches: number;
+  } | null>(null);
+
+  const handleMatch = useCallback(
+    async (opts: { fromOverlay?: boolean } = {}) => {
+      setLoading(true);
+      setError(null);
+      setResult(null);
+      // If we're retrying from the overlay error state, bring it back to
+      // loading mode immediately.
+      if (opts.fromOverlay) {
+        setOverlayMode("loading");
+        setOverlayFading(false);
+        setOverlayActive(true);
       }
-      if (!res.ok) {
-        throw new Error(data.error || "Erreur lors du matching");
+      try {
+        const res = await fetch(`/api/projects/${projectId}/match`, {
+          method: "POST",
+        });
+        const data = await res.json();
+        if (res.status === 402) {
+          // Paywall — close the overlay and surface the upgrade modal instead.
+          setOverlayActive(false);
+          setOverlayFading(false);
+          setPaywallMessage(
+            data?.message ||
+              "Tu as utilisé tes 3 matchings gratuits ce mois-ci. Passe en Pro pour des matchings illimités."
+          );
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(data.error || "Erreur lors du matching");
+        }
+        const total = data.total ?? 0;
+        const highMatches = data.highMatches ?? 0;
+        const goodMatches = data.goodMatches ?? 0;
+        setResult({ total, highMatches, goodMatches });
+
+        if (highMatches + goodMatches > 0) {
+          setConfetti(true);
+          toast.success(
+            "Matching terminé !",
+            `${highMatches} excellent${highMatches > 1 ? "s" : ""} · ${goodMatches} bon${goodMatches > 1 ? "s" : ""} match${goodMatches > 1 ? "s" : ""}`
+          );
+        } else {
+          toast.info(
+            "Matching terminé",
+            "Aucun match prometteur cette fois — essaie d'enrichir ton projet."
+          );
+        }
+
+        if (overlayActive) {
+          if (total === 0) {
+            // No results at all — keep the overlay up with the empty-state
+            // panel so the user has a clear next step.
+            setOverlayMode("empty");
+            setOverlayFading(false);
+          } else {
+            // Success — fade the overlay out and surface the celebration
+            // banner so the freshly rendered cards land in the user's view.
+            setOverlayFading(true);
+            setBanner({
+              key: Date.now(),
+              total,
+              highMatches,
+              goodMatches,
+            });
+            setTimeout(() => {
+              setOverlayActive(false);
+              setOverlayFading(false);
+            }, 500);
+          }
+        }
+
+        startTransition(() => router.refresh());
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Erreur inconnue";
+        setError(message);
+        toast.error("Le matching a échoué", message);
+        if (overlayActive) {
+          setOverlayMode("error");
+          setOverlayFading(false);
+        }
+      } finally {
+        setLoading(false);
       }
-      setResult({
-        total: data.total,
-        highMatches: data.highMatches,
-        goodMatches: data.goodMatches,
-      });
-      // Celebrate when we found at least one promising match — otherwise the
-      // confetti would feel sarcastic on an empty result set.
-      if ((data.highMatches ?? 0) + (data.goodMatches ?? 0) > 0) {
-        setConfetti(true);
-        toast.success(
-          "Matching terminé !",
-          `${data.highMatches} excellent${data.highMatches > 1 ? "s" : ""} · ${data.goodMatches} bon${data.goodMatches > 1 ? "s" : ""} match${data.goodMatches > 1 ? "s" : ""}`
-        );
-      } else {
-        toast.info(
-          "Matching terminé",
-          "Aucun match prometteur cette fois — essaie d'enrichir ton projet."
-        );
-      }
-      // Refresh the server component to show new matches
-      startTransition(() => router.refresh());
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Erreur inconnue";
-      setError(message);
-      toast.error("Le matching a échoué", message);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, router, startTransition, toast]);
+    },
+    [projectId, router, startTransition, toast, overlayActive]
+  );
 
   // Auto-fire once when invoked from the quick-start flow. Page-level guard
   // ensures we only do this when there are no existing match scores, and the
@@ -94,6 +153,8 @@ export function MatchButton({ projectId, autoStart = false }: MatchButtonProps) 
   useEffect(() => {
     if (!autoStart || autoStartedRef.current) return;
     autoStartedRef.current = true;
+    setOverlayActive(true);
+    setOverlayMode("loading");
     void handleMatch();
     // Strip ?match=auto from the URL so a hard refresh doesn't re-run.
     if (typeof window !== "undefined") {
@@ -105,10 +166,23 @@ export function MatchButton({ projectId, autoStart = false }: MatchButtonProps) 
     }
   }, [autoStart, handleMatch]);
 
+  // Auto-dismiss the celebration banner after a few seconds.
+  useEffect(() => {
+    if (!banner) return;
+    const id = setTimeout(() => setBanner(null), 6000);
+    return () => clearTimeout(id);
+  }, [banner]);
+
+  const overlayState: MatchingOverlayState = !overlayActive
+    ? "hidden"
+    : overlayFading
+      ? "fading"
+      : overlayMode;
+
   return (
     <div className="flex flex-col items-end gap-2">
       <Confetti active={confetti} onComplete={() => setConfetti(false)} />
-      <Button onClick={handleMatch} disabled={loading} variant="default">
+      <Button onClick={() => handleMatch()} disabled={loading} variant="default">
         {loading ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -135,7 +209,9 @@ export function MatchButton({ projectId, autoStart = false }: MatchButtonProps) 
           </p>
         </div>
       )}
-      {error && <p className="text-sm font-bold text-red-600">{error}</p>}
+      {error && !overlayActive && (
+        <p className="text-sm font-bold text-red-600">{error}</p>
+      )}
       <UpgradeModal
         open={paywallMessage !== null}
         onClose={() => setPaywallMessage(null)}
@@ -146,6 +222,29 @@ export function MatchButton({ projectId, autoStart = false }: MatchButtonProps) 
         }
         highlightedTier="pro"
       />
+
+      <MatchingOverlay
+        state={overlayState}
+        errorMessage={error}
+        onRetry={() => handleMatch({ fromOverlay: true })}
+        projectId={projectId}
+      />
+
+      {banner && (
+        <div
+          key={banner.key}
+          className="fixed left-1/2 top-6 z-40 -translate-x-1/2 rounded-2xl border-2 border-border bg-[#c8f76f] px-5 py-3 shadow-[6px_6px_0px_0px_#1a1a1a] animate-slide-down-fade"
+          role="status"
+        >
+          <div className="flex items-center gap-3">
+            <PartyPopper className="h-5 w-5 shrink-0" />
+            <p className="text-sm font-black">
+              {banner.total} subvention{banner.total > 1 ? "s" : ""} trouvée
+              {banner.total > 1 ? "s" : ""} pour votre projet !
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

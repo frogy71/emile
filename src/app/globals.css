@@ -192,6 +192,90 @@ body {
   animation: slide-up-fade 0.3s ease-out both;
 }
 
+/* ─── Matching-overlay animations ──────────────────────────────── */
+
+/* Soft pulse for the brutalist Émile logo while matching runs. */
+@keyframes pulse-emile {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 4px 4px 0px 0px #1a1a1a;
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 6px 6px 0px 0px #1a1a1a;
+  }
+}
+
+.animate-pulse-emile {
+  animation: pulse-emile 1.6s ease-in-out infinite;
+}
+
+/* Slow ping ring around the logo — matches the brutalist border style. */
+@keyframes ping-brutal {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  80%, 100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.animate-ping-brutal {
+  animation: ping-brutal 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Gentle fade-in used for rotating status messages. */
+@keyframes fade-in-soft {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-soft {
+  animation: fade-in-soft 0.4s ease-out both;
+}
+
+/* Slide-down + fade for the success banner that follows the overlay. */
+@keyframes slide-down-fade {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -16px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.animate-slide-down-fade {
+  animation: slide-down-fade 0.4s ease-out both;
+}
+
+/* Stagger entrance for matched grant cards. The component sets
+   --stagger-index per card so each one delays slightly more than the last. */
+@keyframes card-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-card-rise-in {
+  animation: card-rise-in 0.45s ease-out both;
+  animation-delay: calc(var(--stagger-index, 0) * 120ms);
+}
+
 /* ─── Blog article typography ──────────────────────────────────── */
 
 .emile-blog-article h2 {
